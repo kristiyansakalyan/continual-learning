@@ -19,6 +19,8 @@ ipykernel = "^6.29.4"
 flake8 = "^7.0.0"
 flake8-black = "^0.3.6"
 pre-commit = "^3.7.0"
+black = {extras = ["jupyter"], version = "^24.4.1"}
+isort = "^5.13.2"
 
 [build-system]
 requires = ["poetry-core"]
