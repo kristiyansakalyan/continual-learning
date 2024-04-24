@@ -1,0 +1,32 @@
+[tool.poetry]
+name = "continual-learning"
+version = "0.1.0"
+description = ""
+authors = ["Kristiyan Sakalyan <kristiyan.sakalyan@airsense.live>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+torch = "^2.2.2"
+torchvision = "^0.17.2"
+opencv-python = "^4.9.0.80"
+matplotlib = "^3.8.4"
+supervision = "^0.19.0"
+
+
+[tool.poetry.group.dev.dependencies]
+ipykernel = "^6.29.4"
+flake8 = "^7.0.0"
+flake8-black = "^0.3.6"
+pre-commit = "^3.7.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 88
+target-version = ['py312']
+
+[tool.isort]
+profile = "black"
