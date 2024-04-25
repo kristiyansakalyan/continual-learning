@@ -9,6 +9,7 @@ from numpy.typing import NDArray
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
+from torchvision.transforms.functional import to_tensor
 
 Split = Literal["train", "val", "test"]
 
@@ -88,7 +89,6 @@ class CadisDataset(Dataset):
         transform : None | transforms.Compose, optional
             A composition of transformations to apply to the images, by default None
         """
-        # TODO: Add default transform
         self.root_folder = root_folder
         self.split = split
         self.img_shape = img_shape
@@ -101,7 +101,7 @@ class CadisDataset(Dataset):
         """Returns the number of images in the dataset."""
         return len(self.imgs)
 
-    def __getitem__(self, idx: int) -> tuple[Image.Image, NDArray[bool]]:
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         """Retrieves an image and its corresponding mask by index.
 
         Parameters
@@ -111,8 +111,8 @@ class CadisDataset(Dataset):
 
         Returns
         -------
-        tuple[Image.Image, NDArray[bool]]
-            A tuple containing the image and its corresponding mask.
+        tuple[torch.Tensor, torch.Tensor]
+            A tuple containing the image and its corresponding mask, both as torch.Tensor.
         """
         image_id = list(self.imgs.keys())[idx]
         image_info = self.imgs[image_id]
@@ -121,13 +121,17 @@ class CadisDataset(Dataset):
         img_path = image_info["path"]
         image = Image.open(img_path).convert("RGB")
 
-        # Create mask and convert it to Tensor
+        # Create mask
         mask = self._create_mask(image_info["segmentation"], image_info["category_id"])
-        mask = torch.from_numpy(mask)
+        mask = torch.from_numpy(
+            mask.astype(np.int64)
+        )  # Ensure dtype is torch.int64 for use with loss functions.
 
         # Apply transformations
         if self.transform is not None:
             image = self.transform(image)
+        else:
+            image = to_tensor(image)
 
         return image, mask
 
@@ -192,9 +196,9 @@ class CadisDataset(Dataset):
             images[img_id]["segmentation"].append(segmentation)
             images[img_id]["category_id"].append(category_id)
 
-        # Extract categories
+        # Extract categories; 0 is left for background
         categories_to_idx = {
-            item["id"]: idx for idx, item in enumerate(split_file["categories"])
+            item["id"]: (idx + 1) for idx, item in enumerate(split_file["categories"])
         }
 
         return images, categories_to_idx
@@ -231,7 +235,9 @@ class CadisDataset(Dataset):
             of x and y coordinates, or if the coordinates are not in the expected format.
         """
         H, W, _ = self.mask_size
-        mask = np.zeros(self.mask_size, dtype=bool)
+        mask = np.zeros(
+            (H, W), dtype=np.int32
+        )  # Only one channel needed, with default class index 0 (background)
 
         for polygon_list, category in zip(polygons, categories):
             # One category might have multiple polygons
@@ -254,14 +260,11 @@ class CadisDataset(Dataset):
                         polygon[0]
                     )  # Close the polygon by adding the first point at the end
 
-                # Create a temporary mask for the current category
-                temp_mask = np.zeros((H, W), dtype=np.uint8)
+                # Fill the polygon with the class index
                 cv2.fillPoly(
-                    temp_mask, [np.array(polygon, dtype=np.int32)], 1
-                )  # Fill the polygon with '1'
-
-                # Place the temporary mask in the correct position in the full mask array
-                mask_idx = self.categories_to_idx[category]
-                mask[:, :, mask_idx] |= temp_mask.astype(bool)
+                    mask,
+                    [np.array(polygon, dtype=np.int32)],
+                    color=self.categories_to_idx[category],
+                )
 
         return mask
