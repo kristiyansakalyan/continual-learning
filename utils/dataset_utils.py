@@ -233,34 +233,35 @@ class CadisDataset(Dataset):
         H, W, _ = self.mask_size
         mask = np.zeros(self.mask_size, dtype=bool)
 
-        for flat_coords, category in zip(polygons, categories):
-            # Check if the number of coordinates is even
-            flat_coords = flat_coords[0]
-            if len(flat_coords) % 2 != 0:
-                raise ValueError(
-                    "The number of coordinates should be even (pairs of x and y)."
-                )
+        for polygon_list, category in zip(polygons, categories):
+            # One category might have multiple polygons
+            for flat_coords in polygon_list:
+                # Check if the number of coordinates is even
+                if len(flat_coords) % 2 != 0:
+                    raise ValueError(
+                        "The number of coordinates should be even (pairs of x and y)."
+                    )
 
-            # Convert flat list to list of (x, y) tuples
-            polygon = [
-                (flat_coords[i], flat_coords[i + 1])
-                for i in range(0, len(flat_coords), 2)
-            ]
+                # Convert flat list to list of (x, y) tuples
+                polygon = [
+                    (flat_coords[i], flat_coords[i + 1])
+                    for i in range(0, len(flat_coords), 2)
+                ]
 
-            # Ensure the polygon is closed (first point equals last point)
-            if polygon[0] != polygon[-1]:
-                polygon.append(
-                    polygon[0]
-                )  # Close the polygon by adding the first point at the end
+                # Ensure the polygon is closed (first point equals last point)
+                if polygon[0] != polygon[-1]:
+                    polygon.append(
+                        polygon[0]
+                    )  # Close the polygon by adding the first point at the end
 
-            # Create a temporary mask for the current category
-            temp_mask = np.zeros((H, W), dtype=np.uint8)
-            cv2.fillPoly(
-                temp_mask, [np.array(polygon, dtype=np.int32)], 1
-            )  # Fill the polygon with '1'
+                # Create a temporary mask for the current category
+                temp_mask = np.zeros((H, W), dtype=np.uint8)
+                cv2.fillPoly(
+                    temp_mask, [np.array(polygon, dtype=np.int32)], 1
+                )  # Fill the polygon with '1'
 
-            # Place the temporary mask in the correct position in the full mask array
-            mask_idx = self.categories_to_idx[category]
-            mask[:, :, mask_idx] |= temp_mask.astype(bool)
+                # Place the temporary mask in the correct position in the full mask array
+                mask_idx = self.categories_to_idx[category]
+                mask[:, :, mask_idx] |= temp_mask.astype(bool)
 
         return mask
