@@ -56,10 +56,6 @@ def overlay_mask_on_image(
             "Mask dimensions must be 2 and must match the height and width of the image"
         )
 
-    # Normalize the tensor to [0, 1] for displaying purposes if it's not already
-    if torch.max(image) > 1.0:
-        image = image / 255.0
-
     # Convert to numpy
     image = image.permute(1, 2, 0).numpy()
     mask = mask.numpy()
@@ -79,7 +75,9 @@ def overlay_mask_on_image(
 
     overlay /= 255.0
 
-    # Blend original and overlay
+    # Blend original and overlay; This results in a little warning regarding
+    # the colors but I think that it makes the segmentation easier to see.
+    # If you change 1 to 1 - alpha instead, it will resolve the warning
     display_image = cv2.addWeighted(image, 1, overlay, alpha, 0)
 
     # Display the result using matplotlib
@@ -107,10 +105,6 @@ def visualize_tensor_image(image: torch.Tensor) -> None:
         raise ValueError(
             "Input tensor must have 3 dimensions (C, H, W) and 1 or 3 channels."
         )
-
-    # Normalize the tensor to [0, 1] for displaying purposes if it's not already
-    if torch.max(image) > 1.0:
-        image = image / 255.0
 
     # Check if it's a grayscale image (1 channel)
     if image.shape[0] == 1:
