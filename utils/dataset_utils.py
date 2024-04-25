@@ -9,25 +9,25 @@ from numpy.typing import NDArray
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
-from torchvision.transforms.functional import to_tensor
 
 Split = Literal["train", "val", "test"]
 
-
-SPLIT_TO_FILE: dict[Split, str] = {
+CADIS_SPLIT_TO_FILE: dict[Split, str] = {
     "train": "training.json",
     "val": "validation.json",
     "test": "test.json",
 }
 
-SPLIT_TO_FOLDER: dict[Split, str] = {
+CADIS_SPLIT_TO_FOLDER: dict[Split, str] = {
     "train": "training",
     "val": "validation",
     "test": "test",
 }
 
+CATARACT_101_ANNOTATION_FILE = "coco-annotations.json"
 
-class CadisImageDict(NamedTuple):
+
+class ImageInfo(NamedTuple):
     """A named tuple to store image data.
 
     Parameters
@@ -38,43 +38,47 @@ class CadisImageDict(NamedTuple):
         List of category IDs for each segment.
     segmentation : list[list[list[float]]]
         List of segmentation polygons.
+    height : int
+        The height of the image.
+    width : int
+        The width of the image
     """
 
     path: str
     category_id: list[int]
     segmentation: list[list[list[float]]]
+    height: int
+    width: int
 
 
-CadisImages: TypeAlias = dict[int, CadisImageDict]
+ImagesDict: TypeAlias = dict[int, ImageInfo]
 
 
-class CadisDataset(Dataset):
+class BaseSegmentDataset(Dataset):
     """A dataset class for handling Cadis data in PyTorch.
 
     Attirbutes
     ----------
     root_folder : str
         The root directory where images and annotations are stored
-    split : Split
-        The dataset split to use ('train', 'val', 'test').
-    img_shape : tuple[int, int, int]
-        The shape of the images (height, width, channels).
+    split : Split | None
+        The dataset split to use ('train', 'val', 'test') if available,
+        by default None
     imgs : CadisImages
         Dictionary of images with their IDs as keys.
+    categories : dict[int, str]
+        Dictionary mapping category IDs to category labels.
     categories_to_idx : dict[int, int]
         Dictionary mapping category IDs to tensor indices.
     transform : None | transforms.Compose
         A composition of transformations to apply to the images.
-    mask_size : tuple[int, int, int]
-        The expected size of the output masks.
     """
 
     def __init__(
-        self,
+        self: "BaseSegmentDataset",
         root_folder: str,
-        split: Split = "train",
-        img_shape: tuple[int, int, int] = (540, 960, 3),
-        transform: None | transforms.Compose = None,
+        split: Split | None = None,
+        transform: transforms.Compose | None = None,
     ):
         """The constructor for the CadisDataset.
 
@@ -83,25 +87,38 @@ class CadisDataset(Dataset):
         root_folder : str
             The root directory where images and split files are stored
         split : Split, optional
-            The dataset split to use ('train', 'val', 'test'), by default "train"
-        img_shape : tuple[int, int, int], optional
-            The shape of the images (height, width, channels), by default (540, 960, 3)
-        transform : None | transforms.Compose, optional
+            The dataset split to use ('train', 'val', 'test') if available,
+            by default None
+        transform : None | transforms.Compose
             A composition of transformations to apply to the images, by default None
         """
         self.root_folder = root_folder
         self.split = split
-        self.img_shape = img_shape
+        self.transform = transform or transforms.Compose([transforms.ToTensor()])
 
-        self.imgs, self.categories_to_idx = self._get_imgs_and_categories()
-        self.transform = transform
-        self.mask_size = (*self.img_shape[:2], len(self.categories_to_idx))
+        # Correct root folder?
+        if not os.path.exists(self.root_folder):
+            raise FileNotFoundError(
+                f"The specified root folder does not exist: {self.root_folder}"
+            )
 
-    def __len__(self):
+        # Valid split?
+        if self.split not in CADIS_SPLIT_TO_FILE.keys():
+            raise ValueError(
+                "Invalid split specified. Expected one of: 'train', 'val', 'test'"
+            )
+
+        self.imgs, self.categories_to_idx, self.categories = (
+            self.load_images_and_categories()
+        )
+
+    def __len__(self: "BaseSegmentDataset") -> int:
         """Returns the number of images in the dataset."""
         return len(self.imgs)
 
-    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+    def __getitem__(
+        self: "BaseSegmentDataset", idx: int
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Retrieves an image and its corresponding mask by index.
 
         Parameters
@@ -117,116 +134,39 @@ class CadisDataset(Dataset):
         image_id = list(self.imgs.keys())[idx]
         image_info = self.imgs[image_id]
 
-        # Load image
-        img_path = image_info["path"]
-        image = Image.open(img_path).convert("RGB")
+        image = Image.open(image_info.path).convert("RGB")
+        mask = self.create_mask(image_info)
 
-        # Create mask
-        mask = self._create_mask(image_info["segmentation"], image_info["category_id"])
-        mask = torch.from_numpy(
-            mask.astype(np.int64)
-        )  # Ensure dtype is torch.int64 for use with loss functions.
-
-        # Apply transformations
-        if self.transform is not None:
+        if self.transform:
             image = self.transform(image)
-        else:
-            image = to_tensor(image)
 
-        return image, mask
+        return image, torch.from_numpy(mask.astype(np.int64))
 
-    def _get_imgs_and_categories(self) -> tuple[CadisImages, dict[int, int]]:
-        """Loads image paths and categories from a JSON file based on
-        the specified dataset split.
+    def load_images_and_categories(
+        self: "BaseSegmentDataset",
+    ) -> tuple[ImagesDict, dict[int, int]]:
+        raise NotImplementedError("This method should be overridden by subclasses.")
 
-        Returns
-        -------
-        tuple[CadisImages, dict[int, int]]
-            A tuple containing a dictionary of image data and a
-            dictionary mapping category IDs to indices.
-
-        Raises
-        ------
-        FileNotFoundError
-            If the specified file was not found
-        ValueError
-            If there is an error in the provided split
-        """
-        if not os.path.exists(self.root_folder):
-            raise FileNotFoundError(
-                f"The specified root folder does not exist: {self.root_folder}"
-            )
-
-        # Determine the correct annotation file based on the split
-        if self.split not in SPLIT_TO_FILE:
-            raise ValueError(
-                "Invalid split specified. Expected one of: 'train', 'val', 'test'"
-            )
-
-        split_file = os.path.join(self.root_folder, SPLIT_TO_FILE[self.split])
-
-        # Check if the annotation file exists
-        if not os.path.exists(split_file):
-            raise FileNotFoundError(
-                f"The specified split file does not exist: {split_file}"
-            )
-
-        # Load annotations from the file
-        with open(split_file, "r") as file:
-            split_file = json.load(file)
-
-        # Create dictionary
-        images: CadisImages = {
-            img["id"]: {
-                "path": os.path.join(
-                    self.root_folder, SPLIT_TO_FOLDER[self.split], img["file_name"]
-                ),
-                "category_id": [],
-                "segmentation": [],
-            }
-            for img in split_file["images"]
-        }
-
-        # Add segmentations
-        for annotation in split_file["annotations"]:
-            img_id = annotation["image_id"]
-            category_id = annotation["category_id"]
-            segmentation = annotation["segmentation"]
-
-            images[img_id]["segmentation"].append(segmentation)
-            images[img_id]["category_id"].append(category_id)
-
-        # Extract categories; 0 is left for background
-        categories_to_idx = {
-            item["id"]: (idx + 1) for idx, item in enumerate(split_file["categories"])
-        }
-
-        return images, categories_to_idx
-
-    def _create_mask(
-        self, polygons: list[list[list[float]]], categories: list[int]
-    ) -> NDArray[bool]:
+    def create_mask(
+        self: "BaseSegmentDataset", image_info: ImageInfo
+    ) -> NDArray[np.int32]:
         """Generates a segmentation mask for the given polygons and category indices.
 
-        This method converts segmentation polygons into a binary mask where each category
-        is represented in a separate channel of the mask. Each polygon is filled into
-        the corresponding category layer of the mask.
+        This method converts segmentation polygons into a class-index mask where each
+        pixel's value corresponds to the class index of the polygon that covers it.
 
         Parameters
         ----------
-        polygons : list[list[list[float]]]
-            A list of polygons where each polygon is represented as a list of lists.
-            Each sublist contains the coordinates of the polygon's vertices.
-        categories : list[int]
-            A list of category indices corresponding to each polygon. These indices
-            determine which layer of the mask each polygon is drawn into.
+        image_info: ImageInfo
+            A dictionary containing the segmentation polygons, the associated categories,
+            the heigth and the width of the image.
 
         Returns
         -------
         NDArray[bool]
-            A multi-layered binary mask with the same height and width as the images in
-            the dataset and depth equal to the number of categories. Each layer of the mask
-            corresponds to a different category, with polygons filled in as True (1).
+            A single-layered 2D array with the same height and width as the images in
+            the dataset, where each pixel's value is the class index.
+
 
         Raises
         ------
@@ -234,7 +174,11 @@ class CadisDataset(Dataset):
             If any polygon has an odd number of coordinates, indicating incomplete pairs
             of x and y coordinates, or if the coordinates are not in the expected format.
         """
-        H, W, _ = self.mask_size
+        polygons = image_info.segmentation
+        categories = image_info.category_id
+        H = image_info.height
+        W = image_info.width
+
         mask = np.zeros(
             (H, W), dtype=np.int32
         )  # Only one channel needed, with default class index 0 (background)
@@ -268,3 +212,140 @@ class CadisDataset(Dataset):
                 )
 
         return mask
+
+    def extract_data_from_annot_file(
+        self: "BaseSegmentDataset", data: dict, additional_path: str = None
+    ) -> tuple[ImagesDict, dict[int, int], dict[int, str]]:
+        """Extracts the annotation data from a given file, which
+        is in COCO format.
+
+        Parameters
+        ----------
+        data : dict
+            The annotation file in COCO-Format
+        additional_path : str, optional
+            Additional path to be joined if needed,
+            by default None
+
+        Returns
+        -------
+        tuple[ImagesDict, dict[int, int], dict[int, str]]
+            The images, mapping between categories and indicies and
+            mapping between categories and the labels.
+        """
+        path = [self.root_folder]
+        if additional_path is not None:
+            path.append(additional_path)
+
+        images: ImagesDict = {
+            img["id"]: ImageInfo(
+                path=os.path.join(*path, img["file_name"]),
+                category_id=[],
+                segmentation=[],
+                height=img["height"],
+                width=img["width"],
+            )
+            for img in data["images"]
+        }
+
+        for annotation in data["annotations"]:
+            img = images[annotation["image_id"]]
+            img.category_id.append(annotation["category_id"])
+            img.segmentation.append(annotation["segmentation"])
+
+        categories_to_idx = {
+            cat["id"]: idx + 1 for idx, cat in enumerate(data["categories"])
+        }
+
+        categories = {
+            (idx + 1): cat["name"] for idx, cat in enumerate(data["categories"])
+        }
+        categories[0] = "bg"
+
+        return images, categories_to_idx, categories
+
+
+class Cataract101Dataset(BaseSegmentDataset):
+    """A dataset class for handling the Cataract-101 dataset
+
+    Splits
+    ------
+    The Cataract-101 dataset does not provide pre-defined splits. You can use
+    PyTorch utilities to create a split. Here is an example:
+
+        >>> from torch.utils.data import random_split
+        >>> total_size = len(cadis_dataset)
+        >>> # You can adapt the sizes
+        >>> train_size = int(0.7 * total_size)
+        >>> val_size = int(0.15 * total_size)
+        >>> test_size = total_size - train_size - val_size
+        >>> train_dataset, val_dataset, test_dataset = random_split(cadis_dataset, [train_size, val_size, test_size])
+
+    """
+
+    def load_images_and_categories(
+        self: "Cataract101Dataset",
+    ) -> tuple[ImagesDict, dict[int, int], dict[int, str]]:
+        """Loads the images and categories for the Cataract-101 dataset.
+
+        Returns
+        -------
+        tuple[ImagesDict, dict[int, int], dict[int, str]]
+            The images, mapping between categories and indicies and
+            mapping between categories and the labels.
+
+        Raises
+        ------
+        FileNotFoundError
+            If the specified file was not found
+        """
+        annotation_file = os.path.join(self.root_folder, CATARACT_101_ANNOTATION_FILE)
+
+        # Check if the annotation file exists
+        if not os.path.exists(annotation_file):
+            raise FileNotFoundError(
+                f"The specified split file does not exist: {annotation_file}"
+            )
+
+        with open(annotation_file, "r") as file:
+            data = json.load(file)
+
+        return self.extract_data_from_annot_file(data)
+
+
+class CadisDataset(BaseSegmentDataset):
+    """A dataset class for handling the Cadis dataset"""
+
+    def load_images_and_categories(
+        self: "CadisDataset",
+    ) -> tuple[ImagesDict, dict[int, int], dict[int, str]]:
+        """Loads the images and categories for the Cadis dataset.
+
+        Returns
+        -------
+        tuple[ImagesDict, dict[int, int], dict[int, str]]
+            The images, mapping between categories and indicies and
+            mapping between categories and the labels.
+
+        Raises
+        ------
+        FileNotFoundError
+            If the specified file was not found
+        """
+        split_annot_file = os.path.join(
+            self.root_folder, CADIS_SPLIT_TO_FILE[self.split]
+        )
+
+        # Check if the annotation file exists
+        if not os.path.exists(split_annot_file):
+            raise FileNotFoundError(
+                f"The specified split file does not exist: {split_annot_file}"
+            )
+
+        # Load annotations from the file
+        with open(split_annot_file, "r") as file:
+            data = json.load(file)
+
+        return self.extract_data_from_annot_file(
+            data, additional_path=CADIS_SPLIT_TO_FOLDER[self.split]
+        )
