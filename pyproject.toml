@@ -2,7 +2,7 @@
 name = "continual-learning"
 version = "0.1.0"
 description = ""
-authors = ["Kristiyan Sakalyan <kristiyan.sakalyan@airsense.live>"]
+authors = ["Kristiyan Sakalyan <kristian.sakalian@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
