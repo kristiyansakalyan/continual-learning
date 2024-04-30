@@ -26,6 +26,29 @@ CADIS_SPLIT_TO_FOLDER: dict[Split, str] = {
 
 CATARACT_101_ANNOTATION_FILE = "coco-annotations.json"
 
+CATARACT_1K_FODLERS: dict[str, str] = {
+    "annotations": "Annotations/Coco-Annotations",
+    "images": "Annotations/Images-and-Supervisely-Annotations",
+}
+
+CATARACT_1K_CATEGORIES: dict[str, int] = {
+    "Cornea": 1,
+    "Katena Forceps": 2,
+    "cornea1": 3,
+    "Lens Injector": 4,
+    "Irrigation-Aspiration": 5,
+    "Capsulorhexis Forceps": 6,
+    "Spatula": 7,
+    "pupil1": 8,
+    "Phacoemulsification Tip": 9,
+    "Incision Knife": 10,
+    "Pupil": 11,
+    "Slit Knife": 12,
+    "Lens": 13,
+    "Capsulorhexis Cystotome": 14,
+    "Gauge": 15,
+}
+
 
 class ImageInfo(NamedTuple):
     """A named tuple to store image data.
@@ -68,7 +91,7 @@ class BaseSegmentDataset(Dataset):
         Dictionary of images with their IDs as keys.
     categories : dict[int, str]
         Dictionary mapping category IDs to category labels.
-    categories_to_idx : dict[int, int]
+    categories_to_idx : dict[int, int] | dict[str, dict[int, int]]
         Dictionary mapping category IDs to tensor indices.
     transform : None | transforms.Compose
         A composition of transformations to apply to the images.
@@ -100,12 +123,6 @@ class BaseSegmentDataset(Dataset):
         if not os.path.exists(self.root_folder):
             raise FileNotFoundError(
                 f"The specified root folder does not exist: {self.root_folder}"
-            )
-
-        # Valid split?
-        if self.split not in CADIS_SPLIT_TO_FILE.keys():
-            raise ValueError(
-                "Invalid split specified. Expected one of: 'train', 'val', 'test'"
             )
 
         self.imgs, self.categories_to_idx, self.categories = (
@@ -144,7 +161,7 @@ class BaseSegmentDataset(Dataset):
 
     def load_images_and_categories(
         self: "BaseSegmentDataset",
-    ) -> tuple[ImagesDict, dict[int, int]]:
+    ) -> tuple[ImagesDict, dict[int, int] | dict[str, dict[int, int]], dict[int, str]]:
         raise NotImplementedError("This method should be overridden by subclasses.")
 
     def create_mask(
@@ -285,12 +302,12 @@ class Cataract101Dataset(BaseSegmentDataset):
 
     def load_images_and_categories(
         self: "Cataract101Dataset",
-    ) -> tuple[ImagesDict, dict[int, int], dict[int, str]]:
+    ) -> tuple[ImagesDict, dict[int, int] | dict[str, dict[int, int]], dict[int, str]]:
         """Loads the images and categories for the Cataract-101 dataset.
 
         Returns
         -------
-        tuple[ImagesDict, dict[int, int], dict[int, str]]
+        tuple[ImagesDict, dict[int, int] | dict[str, dict[int, int]], dict[int, str]]
             The images, mapping between categories and indicies and
             mapping between categories and the labels.
 
@@ -318,12 +335,12 @@ class CadisDataset(BaseSegmentDataset):
 
     def load_images_and_categories(
         self: "CadisDataset",
-    ) -> tuple[ImagesDict, dict[int, int], dict[int, str]]:
+    ) -> tuple[ImagesDict, dict[int, int] | dict[str, dict[int, int]], dict[int, str]]:
         """Loads the images and categories for the Cadis dataset.
 
         Returns
         -------
-        tuple[ImagesDict, dict[int, int], dict[int, str]]
+        tuple[ImagesDict, dict[int, int] | dict[str, dict[int, int]], dict[int, str]]
             The images, mapping between categories and indicies and
             mapping between categories and the labels.
 
@@ -332,6 +349,12 @@ class CadisDataset(BaseSegmentDataset):
         FileNotFoundError
             If the specified file was not found
         """
+        # Valid split?
+        if self.split not in CADIS_SPLIT_TO_FILE.keys():
+            raise ValueError(
+                "Invalid split specified. Expected one of: 'train', 'val', 'test'"
+            )
+
         split_annot_file = os.path.join(
             self.root_folder, CADIS_SPLIT_TO_FILE[self.split]
         )
@@ -349,3 +372,154 @@ class CadisDataset(BaseSegmentDataset):
         return self.extract_data_from_annot_file(
             data, additional_path=CADIS_SPLIT_TO_FOLDER[self.split]
         )
+
+
+class Cataract1K(BaseSegmentDataset):
+    """A dataset class for handling the Cataract-1K dataset"""
+
+    def load_images_and_categories(
+        self: "CadisDataset",
+    ) -> tuple[ImagesDict, dict[int, int] | dict[str, dict[int, int]], dict[int, str]]:
+        """Loads the images and categories for the Cadis dataset.
+
+        Returns
+        -------
+        tuple[ImagesDict, dict[int, int] | dict[str, dict[int, int]], dict[int, str]]
+            The images, mapping between categories and indicies and
+            mapping between categories and the labels.
+
+        Raises
+        ------
+        FileNotFoundError
+            If the specified file was not found
+        """
+        annotations_dir = os.path.join(
+            self.root_folder, CATARACT_1K_FODLERS["annotations"]
+        )
+        cases = [
+            case for case in os.listdir(annotations_dir) if case.startswith("case_")
+        ]
+
+        images: ImagesDict = {}
+
+        case_cat_to_idx: dict[str, dict[int, int]] = {}
+
+        for case in cases:
+            annotation_file_path = os.path.join(
+                annotations_dir, case, "annotations/instances.json"
+            )
+            # Check if the annotation file exists:
+            if not os.path.exists(annotation_file_path):
+                raise FileNotFoundError(
+                    f"The annotation file does not exist: {annotation_file_path}"
+                )
+
+            # Load file
+            with open(annotation_file_path, "r") as file:
+                data = json.load(file)
+
+            # Images path:
+            imgs_path = os.path.join(CATARACT_1K_FODLERS["images"], case, "img")
+
+            imgs, _, _ = self.extract_data_from_annot_file(
+                data, additional_path=imgs_path
+            )
+
+            # Extract the case specific mapping to our categories
+            categories = data["categories"]
+            cat_to_idx_curr = {
+                entry["id"]: CATARACT_1K_CATEGORIES[entry["name"]]
+                for entry in categories
+            }
+            case_cat_to_idx[case.replace("_", "")] = cat_to_idx_curr
+
+            images.update(imgs)
+
+        categories = {
+            v: k
+            for k, v in zip(
+                CATARACT_1K_CATEGORIES.keys(), CATARACT_1K_CATEGORIES.values()
+            )
+        }
+        categories[0] = "Background"
+
+        return images, case_cat_to_idx, categories
+
+    def __getitem__(self: "Cataract1K", idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+        image_id = list(self.imgs.keys())[idx]
+        image_info = self.imgs[image_id]
+        case = image_info.path.split("/")[-1].split("_")[0]
+
+        image = Image.open(image_info.path).convert("RGB")
+        mask = self.create_mask(image_info, case)
+
+        if self.transform:
+            image = self.transform(image)
+
+        return image, torch.from_numpy(mask.astype(np.int64))
+
+    def create_mask(
+        self: "BaseSegmentDataset", image_info: ImageInfo, case: str
+    ) -> NDArray[np.int32]:
+        """Generates a segmentation mask for the given polygons and category indices.
+
+        This method converts segmentation polygons into a class-index mask where each
+        pixel's value corresponds to the class index of the polygon that covers it.
+
+        Parameters
+        ----------
+        image_info: ImageInfo
+            A dictionary containing the segmentation polygons, the associated categories,
+            the heigth and the width of the image.
+
+        Returns
+        -------
+        NDArray[bool]
+            A single-layered 2D array with the same height and width as the images in
+            the dataset, where each pixel's value is the class index.
+
+
+        Raises
+        ------
+        ValueError
+            If any polygon has an odd number of coordinates, indicating incomplete pairs
+            of x and y coordinates, or if the coordinates are not in the expected format.
+        """
+        polygons = image_info.segmentation
+        categories = image_info.category_id
+        H = image_info.height
+        W = image_info.width
+
+        mask = np.zeros(
+            (H, W), dtype=np.int32
+        )  # Only one channel needed, with default class index 0 (background)
+
+        for polygon_list, category in zip(polygons, categories):
+            # One category might have multiple polygons
+            for flat_coords in polygon_list:
+                # Check if the number of coordinates is even
+                if len(flat_coords) % 2 != 0:
+                    raise ValueError(
+                        "The number of coordinates should be even (pairs of x and y)."
+                    )
+
+                # Convert flat list to list of (x, y) tuples
+                polygon = [
+                    (flat_coords[i], flat_coords[i + 1])
+                    for i in range(0, len(flat_coords), 2)
+                ]
+
+                # Ensure the polygon is closed (first point equals last point)
+                if polygon[0] != polygon[-1]:
+                    polygon.append(
+                        polygon[0]
+                    )  # Close the polygon by adding the first point at the end
+
+                # Fill the polygon with the class index
+                cv2.fillPoly(
+                    mask,
+                    [np.array(polygon, dtype=np.int32)],
+                    color=self.categories_to_idx[case][category],
+                )
+
+        return mask
