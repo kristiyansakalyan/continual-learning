@@ -446,9 +446,22 @@ class Cataract1K(BaseSegmentDataset):
         return images, case_cat_to_idx, categories
 
     def __getitem__(self: "Cataract1K", idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+        """Overrides the `BaseSegmentDataset` getitem method as it needs to add
+        case-specific information.
+
+        Parameters
+        ----------
+        idx : int
+            Index
+
+        Returns
+        -------
+        tuple[torch.Tensor, torch.Tensor]
+            Image and mask.
+        """
         image_id = list(self.imgs.keys())[idx]
         image_info = self.imgs[image_id]
-        case = image_info.path.split("/")[-1].split("_")[0]
+        case = image_info.path.split("/")[-3].replace("_", "")
 
         image = Image.open(image_info.path).convert("RGB")
         mask = self.create_mask(image_info, case)
@@ -471,6 +484,9 @@ class Cataract1K(BaseSegmentDataset):
         image_info: ImageInfo
             A dictionary containing the segmentation polygons, the associated categories,
             the heigth and the width of the image.
+        case: str
+            The specific case of the dataset. Categories mapping varry between the
+            different cases.
 
         Returns
         -------
