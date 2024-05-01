@@ -510,8 +510,24 @@ class Cataract1K(BaseSegmentDataset):
             (H, W), dtype=np.int32
         )  # Only one channel needed, with default class index 0 (background)
 
-        for polygon_list, category in zip(polygons, categories):
-            # One category might have multiple polygons
+        # Define a custom sorting function where Polygons are filled first for
+        # cornea () and then p
+        def custom_sort(item):
+            """
+            Define a custom sorting function to make sure Polygons are filled first for
+            cornea (id=4) and then pupil (id=3)
+            """
+            category = item[1]
+            if category == 4:
+                return 0  # Sort 3 after 4
+            elif category == 3:
+                return 1  # Sort 4 before 3
+            else:
+                return 2  # Sort others after 3 and 4
+
+        sorted_data = sorted(zip(polygons, categories), key=custom_sort)
+
+        for polygon_list, category in sorted_data:
             for flat_coords in polygon_list:
                 # Check if the number of coordinates is even
                 if len(flat_coords) % 2 != 0:
