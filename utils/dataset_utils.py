@@ -95,6 +95,8 @@ class BaseSegmentDataset(Dataset):
         Dictionary mapping category IDs to tensor indices.
     transform : None | transforms.Compose
         A composition of transformations to apply to the images.
+    class_mappings: dict[int, int] | None
+        Dictionary that maps the classes of the dataset to some other ones
     """
 
     def __init__(
@@ -102,6 +104,7 @@ class BaseSegmentDataset(Dataset):
         root_folder: str,
         split: Split | None = None,
         transform: transforms.Compose | None = None,
+        class_mappings: dict[int, int] | None = None,
     ):
         """The constructor for the CadisDataset.
 
@@ -118,6 +121,7 @@ class BaseSegmentDataset(Dataset):
         self.root_folder = root_folder
         self.split = split
         self.transform = transform or transforms.Compose([transforms.ToTensor()])
+        self.class_mappings = class_mappings
 
         # Correct root folder?
         if not os.path.exists(self.root_folder):
@@ -221,11 +225,22 @@ class BaseSegmentDataset(Dataset):
                         polygon[0]
                     )  # Close the polygon by adding the first point at the end
 
+                # If class mappings are provided, use them
+                # otherwise simply use the class.
+                color = self.categories_to_idx[category]
+                if self.class_mappings is not None:
+                    color = self.class_mappings.get(color, 0)
+
+                # In domain incremental scenario, we do not consider all the
+                # categories => skip this class if it's not part of our new classes.
+                if color == 0:
+                    continue
+
                 # Fill the polygon with the class index
                 cv2.fillPoly(
                     mask,
                     [np.array(polygon, dtype=np.int32)],
-                    color=self.categories_to_idx[category],
+                    color=color,
                 )
 
         return mask
@@ -277,7 +292,7 @@ class BaseSegmentDataset(Dataset):
         categories = {
             (idx + 1): cat["name"] for idx, cat in enumerate(data["categories"])
         }
-        categories[0] = "bg"
+        categories[0] = "Background"
 
         return images, categories_to_idx, categories
 
@@ -546,6 +561,17 @@ class Cataract1K(BaseSegmentDataset):
                     polygon.append(
                         polygon[0]
                     )  # Close the polygon by adding the first point at the end
+
+                # If class mappings are provided, use them
+                # otherwise simply use the class.
+                color = self.categories_to_idx[case][category]
+                if self.class_mappings is not None:
+                    color = self.class_mappings.get(color, 0)
+
+                # In domain incremental scenario, we do not consider all the
+                # categories => skip this class if it's not part of our new classes.
+                if color == 0:
+                    continue
 
                 # Fill the polygon with the class index
                 cv2.fillPoly(
