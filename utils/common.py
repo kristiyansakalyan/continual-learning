@@ -15,3 +15,6 @@ def set_seed(seed: int) -> None:
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
+
+
+MASK_IGNORE_VALUE = 255

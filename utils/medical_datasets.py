@@ -4,11 +4,15 @@ from typing import Literal, NamedTuple, TypeAlias
 
 import cv2
 import numpy as np
+import pandas as pd
 import torch
+import torchvision.transforms.functional as F
 from numpy.typing import NDArray
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
+
+from utils.common import MASK_IGNORE_VALUE
 
 Split = Literal["train", "val", "test"]
 
@@ -200,9 +204,9 @@ class BaseSegmentDataset(Dataset):
         H = image_info.height
         W = image_info.width
 
-        mask = np.zeros(
-            (H, W), dtype=np.int32
-        )  # Only one channel needed, with default class index 0 (background)
+        mask = np.full(
+            (H, W), MASK_IGNORE_VALUE, dtype=np.int32
+        )  # Only one channel needed, with default class index 255 (background)
 
         for polygon_list, category in zip(polygons, categories):
             # One category might have multiple polygons
@@ -229,11 +233,11 @@ class BaseSegmentDataset(Dataset):
                 # otherwise simply use the class.
                 color = self.categories_to_idx[category]
                 if self.class_mappings is not None:
-                    color = self.class_mappings.get(color, 0)
+                    color = self.class_mappings.get(color, -1)
 
                 # In domain incremental scenario, we do not consider all the
                 # categories => skip this class if it's not part of our new classes.
-                if color == 0:
+                if color == -1:
                     continue
 
                 # Fill the polygon with the class index
@@ -289,10 +293,8 @@ class BaseSegmentDataset(Dataset):
             cat["id"]: idx + 1 for idx, cat in enumerate(data["categories"])
         }
 
-        categories = {
-            (idx + 1): cat["name"] for idx, cat in enumerate(data["categories"])
-        }
-        categories[0] = "Background"
+        categories = {idx: cat["name"] for idx, cat in enumerate(data["categories"])}
+        categories[255] = "Background"
 
         return images, categories_to_idx, categories
 
@@ -456,7 +458,7 @@ class Cataract1K(BaseSegmentDataset):
                 CATARACT_1K_CATEGORIES.keys(), CATARACT_1K_CATEGORIES.values()
             )
         }
-        categories[0] = "Background"
+        categories[255] = "Background"
 
         return images, case_cat_to_idx, categories
 
@@ -521,9 +523,9 @@ class Cataract1K(BaseSegmentDataset):
         H = image_info.height
         W = image_info.width
 
-        mask = np.zeros(
-            (H, W), dtype=np.int32
-        )  # Only one channel needed, with default class index 0 (background)
+        mask = np.full(
+            (H, W), MASK_IGNORE_VALUE, dtype=np.int32
+        )  # Only one channel needed, with default class index 255 (background)
 
         # Define a custom sorting function where Polygons are filled first for
         # cornea () and then p
@@ -566,11 +568,11 @@ class Cataract1K(BaseSegmentDataset):
                 # otherwise simply use the class.
                 color = self.categories_to_idx[case][category]
                 if self.class_mappings is not None:
-                    color = self.class_mappings.get(color, 0)
+                    color = self.class_mappings.get(color, -1)
 
                 # In domain incremental scenario, we do not consider all the
                 # categories => skip this class if it's not part of our new classes.
-                if color == 0:
+                if color == -1:
                     continue
 
                 # Fill the polygon with the class index
@@ -581,3 +583,129 @@ class Cataract1K(BaseSegmentDataset):
                 )
 
         return mask
+
+
+def parse_video_splits(content: list[str]) -> dict[str, list[str]]:
+    training = []
+    validation = []
+    test = []
+    current_list = None
+
+    for line in content:
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith("# Training"):
+            current_list = training
+        elif line.startswith("# Validation"):
+            current_list = validation
+        elif line.startswith("# Test"):
+            current_list = test
+        elif line.startswith("Video"):
+            if current_list is not None:
+                current_list.append(line)
+
+    return {"train": training, "val": validation, "test": test}
+
+
+class CadisV2Image(NamedTuple):
+    img_path: str
+    mask_path: str
+
+
+class CadisV2(Dataset):
+
+    def __init__(
+        self: "CadisV2",
+        root_folder: str,
+        split: Split = "train",
+        transform: transforms.Compose | None = None,
+        class_mappings: dict[int, int] | None = None,
+    ):
+        self.root_folder = root_folder
+        self.split = split
+        self.transform = transform or transforms.Compose([transforms.ToTensor()])
+        self.class_mappings = class_mappings
+
+        # Correct root folder?
+        if not os.path.exists(self.root_folder):
+            raise FileNotFoundError(
+                f"The specified root folder does not exist: {self.root_folder}"
+            )
+
+        split_path = os.path.join(self.root_folder, "splits.txt")
+        # Split file available?
+        if not os.path.exists(split_path):
+            raise FileNotFoundError(f"The splits file does not exist: {split_path}")
+
+        with open(split_path, "r") as file:
+            data = file.readlines()
+
+        splits = parse_video_splits(data)
+
+        if self.split not in splits:
+            raise ValueError(
+                f'The provided split is incorrect: {split}; Please choose one of ("train", "val", "test")'
+            )
+
+        self.videos = splits[self.split]
+
+        # Extract the path to each image and each label mask
+        self.data: list[CadisV2Image] = []
+
+        for video in self.videos:
+            imgs_path = os.path.join(self.root_folder, video, "Images")
+            labels_path = os.path.join(self.root_folder, video, "Labels")
+
+            images_filenames = os.listdir(imgs_path)
+            labels_filenames = os.listdir(labels_path)
+
+            self.data += [
+                CadisV2Image(
+                    os.path.join(imgs_path, img_filename),
+                    os.path.join(labels_path, label_filename),
+                )
+                for img_filename, label_filename in zip(
+                    images_filenames, labels_filenames
+                )
+            ]
+
+        classes_path = os.path.join(self.root_folder, "classes.csv")
+        if not os.path.exists(classes_path):
+            raise FileNotFoundError(f"The classes file does not exist: {classes_path}")
+
+        self.categories = (
+            pd.read_csv(classes_path).set_index("Index")["Class"].to_dict()
+        )
+
+        self.categories[255] = "Background"
+
+    def __len__(self: "BaseSegmentDataset") -> int:
+        """Returns the number of images in the dataset."""
+        return len(self.data)
+
+    def __getitem__(
+        self: "BaseSegmentDataset", idx: int
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Retrieves an image and its corresponding mask by index.
+
+        Parameters
+        ----------
+        idx : int
+            The index of the image in the dataset.
+
+        Returns
+        -------
+        tuple[torch.Tensor, torch.Tensor]
+            A tuple containing the image and its corresponding mask, both as torch.Tensor.
+        """
+        image_info = self.data[idx]
+
+        image = cv2.imread(image_info.img_path)
+        mask = cv2.imread(image_info.mask_path, cv2.COLOR_BGR2GRAY)
+        mask = (F.to_tensor(mask) * 255).to(torch.int32).squeeze(0)
+
+        if self.transform:
+            image = self.transform(image)
+
+        return image, mask
