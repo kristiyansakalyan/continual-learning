@@ -391,7 +391,7 @@ class CadisDataset(BaseSegmentDataset):
         )
 
 
-class Cataract1K(BaseSegmentDataset):
+class Cataract1KDataset(BaseSegmentDataset):
     """A dataset class for handling the Cataract-1K dataset"""
 
     def load_images_and_categories(
@@ -462,7 +462,9 @@ class Cataract1K(BaseSegmentDataset):
 
         return images, case_cat_to_idx, categories
 
-    def __getitem__(self: "Cataract1K", idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+    def __getitem__(
+        self: "Cataract1KDataset", idx: int
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Overrides the `BaseSegmentDataset` getitem method as it needs to add
         case-specific information.
 
@@ -613,10 +615,10 @@ class CadisV2Image(NamedTuple):
     mask_path: str
 
 
-class CadisV2(Dataset):
+class CadisV2Dataset(Dataset):
 
     def __init__(
-        self: "CadisV2",
+        self: "CadisV2Dataset",
         root_folder: str,
         split: Split = "train",
         transform: transforms.Compose | None = None,
@@ -702,10 +704,17 @@ class CadisV2(Dataset):
         image_info = self.data[idx]
 
         image = cv2.imread(image_info.img_path)
+        image = self.transform(image)
+
         mask = cv2.imread(image_info.mask_path, cv2.COLOR_BGR2GRAY)
         mask = (F.to_tensor(mask) * 255).to(torch.int32).squeeze(0)
 
-        if self.transform:
-            image = self.transform(image)
+        if self.class_mappings is not None:
+            mapped_mask = torch.full_like(mask, MASK_IGNORE_VALUE)
+            for zeiss_id, values in self.class_mappings.items():
+                for cadis_id in values:
+                    mapped_mask[mask == cadis_id] = zeiss_id
+
+            mask = mapped_mask
 
         return image, mask
