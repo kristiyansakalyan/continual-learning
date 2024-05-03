@@ -160,10 +160,9 @@ class BaseSegmentDataset(Dataset):
         image_info = self.imgs[image_id]
 
         image = Image.open(image_info.path).convert("RGB")
-        mask = self.create_mask(image_info)
+        image = self.transform(image)
 
-        if self.transform:
-            image = self.transform(image)
+        mask = self.create_mask(image_info)
 
         return image, torch.from_numpy(mask.astype(np.int64))
 
@@ -483,10 +482,9 @@ class Cataract1KDataset(BaseSegmentDataset):
         case = image_info.path.split("/")[-3].replace("_", "")
 
         image = Image.open(image_info.path).convert("RGB")
-        mask = self.create_mask(image_info, case)
+        image = self.transform(image)
 
-        if self.transform:
-            image = self.transform(image)
+        mask = self.create_mask(image_info, case)
 
         return image, torch.from_numpy(mask.astype(np.int64))
 
