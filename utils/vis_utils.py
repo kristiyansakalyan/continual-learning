@@ -28,6 +28,46 @@ COLORS = [
     (0, 139, 139),  # Dark Cyan
 ]
 
+# Reuse colors from CaDISV2
+NEW_COLORS = [
+    [0, 137, 255],
+    [255, 165, 0],
+    [255, 156, 201],
+    [99, 0, 255],
+    [255, 0, 0],
+    [255, 0, 165],
+    [255, 255, 255],
+    [141, 141, 141],
+    [255, 218, 0],
+    [173, 156, 255],
+    [73, 73, 73],
+    [250, 213, 255],
+    [255, 156, 156],
+    [99, 255, 0],
+    [157, 225, 255],
+    [255, 89, 124],
+    [173, 255, 156],
+    [255, 60, 0],
+    [40, 0, 255],
+    [170, 124, 0],
+    [188, 255, 0],
+    [0, 207, 255],
+    [0, 255, 207],
+    [188, 0, 255],
+    [243, 0, 255],
+    [0, 203, 108],
+    [252, 255, 0],
+    [93, 182, 177],
+    [0, 81, 203],
+    [211, 183, 120],
+    [231, 203, 0],
+    [0, 124, 255],
+    [10, 91, 44],
+    [2, 0, 60],
+    [0, 144, 2],
+    [133, 59, 59],
+]
+
 
 def overlay_mask_on_image(
     image: torch.Tensor, mask: torch.Tensor, alpha: float = 0.8
@@ -66,12 +106,12 @@ def overlay_mask_on_image(
     # Map each class index in the mask to its corresponding color
     for class_index in np.unique(mask):
         # Skip background
-        if class_index == 0:
+        if class_index == 255:
             continue
 
-        if class_index < len(COLORS):
+        if class_index < len(NEW_COLORS):
             class_mask = mask == class_index
-            overlay[class_mask] = COLORS[class_index % len(COLORS)]
+            overlay[class_mask] = NEW_COLORS[class_index % len(COLORS)]
 
     overlay /= 255.0
 
