@@ -3,9 +3,12 @@ A research project investigating catastrophic forgetting in DNNs for medical dat
 
 ## Datasets
 The datasets we use are Cadis and frames from the Cataract-101 dataset. 
-You can download them both [here](https://ftp.itec.aau.at/datasets/ovid/InSegCat/index.html).
 
-They are both in the COCO-format. You can learn more about it [here](https://cocodataset.org/#format-data).
+Cataract1k: [here](https://www.synapse.org/#!Synapse:syn52540135/wiki/626061) (only Segmentation_dataset)
+
+CaDIS: [here](https://cataracts.grand-challenge.org/CaDIS/)
+
+Learn more about COCO format [here](https://cocodataset.org/#format-data).
 
 ## Code related
 Some important notes regarding package management and code quality.
