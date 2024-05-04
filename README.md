@@ -9,6 +9,8 @@ They are both in the COCO-format. You can learn more about it [here](https://coc
 
 ## Code related
 Some important notes regarding package management and code quality.
+
+
 ### Managing dependencies
 We can use poetry as a package manager and make sure that we all have the same dependencies. Here is a small tutorial on how to set it up:
 ```
