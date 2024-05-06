@@ -1,3 +1,4 @@
+import torch
 from torch.utils.data import random_split
 from torchvision import transforms
 
@@ -153,7 +154,7 @@ ZEISS_CATEGORIES = {
     8: "I/A handpiece",
     9: "Lens injector",
     10: "Pupil",
-    11: "Iris",
+    11: "Cornea",  # "Iris",
     # Class incremental
     12: "Intraocular Lens",
     13: "Viter. handpiece",
@@ -328,5 +329,9 @@ def get_cataract1k_dataset(
     train_size = int(train_ratio * total_size)
     val_size = int(val_ratio * total_size)
     test_size = total_size - val_size - train_size
+    generator = torch.Generator().manual_seed(42)
+    train, val, test = random_split(
+        dataset, [train_size, val_size, test_size], generator
+    )
 
-    return random_split(dataset, [train_size, val_size, test_size])
+    return train, val, test

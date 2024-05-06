@@ -567,7 +567,9 @@ class Cataract1KDataset(BaseSegmentDataset):
                 # If class mappings are provided, use them
                 # otherwise simply use the class.
                 color = self.categories_to_idx[case][category]
+
                 if self.class_mappings is not None:
+
                     color = self.class_mappings.get(color, -1)
 
                 # In domain incremental scenario, we do not consider all the
@@ -579,7 +581,7 @@ class Cataract1KDataset(BaseSegmentDataset):
                 cv2.fillPoly(
                     mask,
                     [np.array(polygon, dtype=np.int32)],
-                    color=self.categories_to_idx[case][category],
+                    color=color,  # self.categories_to_idx[case][category],
                 )
 
         return mask
