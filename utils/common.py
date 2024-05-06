@@ -116,7 +116,7 @@ def m2f_extract_pred_maps_and_masks(
         )
 
         for i, category in enumerate(category_list):
-            output_mask[curr_mask[i] == 1] = category
+            output_mask[curr_mask[i] == 1] = int(category)  # wtf?
 
         masks.append(output_mask)
 
