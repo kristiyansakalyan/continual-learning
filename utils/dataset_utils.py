@@ -139,7 +139,7 @@ ZEISS_TO_CADISV2 = {
     8: [15],
     9: [14],
     10: [0],
-    11: [6],
+    11: [4],#[6],
 }
 
 ZEISS_CATEGORIES = {
@@ -154,7 +154,7 @@ ZEISS_CATEGORIES = {
     8: "I/A handpiece",
     9: "Lens injector",
     10: "Pupil",
-    11: "Cornea",  # "Iris",
+    11: "Iris",
     # Class incremental
     12: "Intraocular Lens",
     13: "Viter. handpiece",
