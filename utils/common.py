@@ -29,6 +29,39 @@ class Mask2FormerBatch(NamedTuple):
     class_labels: list[torch.LongTensor]
 
 
+def preprocess_mask2former_swin(
+    batch: list[tuple[torch.Tensor, torch.Tensor]]
+) -> Mask2FormerBatch:
+    pixel_values = torch.stack([img for img, _ in batch])
+    pixel_masks = torch.stack([torch.ones_like(img) for img, _ in batch])
+
+    # Filter and collect class labels, ignoring the MASK_IGNORE_VALUE
+    class_labels = []
+    for _, mask in batch:
+        unique_labels = torch.unique(mask)
+        # Filter out the ignore value
+        filtered_labels = unique_labels[unique_labels != MASK_IGNORE_VALUE]
+        class_labels.append(filtered_labels)
+
+    mask_labels = []
+    # Convert each mask from HxW to CxHxW
+    for (_, mask), classes_list in zip(batch, class_labels):
+        mask = mask.squeeze()
+        mask_new = torch.zeros((len(classes_list), mask.shape[0], mask.shape[1]))
+
+        for idx, curr in enumerate(classes_list):
+            mask_new[idx, mask == curr] = 1
+
+        mask_labels.append(mask_new)
+
+    return {
+        "pixel_values": pixel_values,
+        "pixel_mask": pixel_masks,
+        "mask_labels": mask_labels,
+        "class_labels": class_labels,
+    }
+
+
 def _preprocess_mask2former(
     image_processor: AutoImageProcessor, batch: list[tuple[torch.Tensor, torch.Tensor]]
 ) -> Mask2FormerBatch:
@@ -98,6 +131,8 @@ def m2f_extract_pred_maps_and_masks(
         )
         for mask in batch["mask_labels"]
     ]
+
+    # We can use that: https://github.com/huggingface/transformers/blob/main/src/transformers/models/mask2former/image_processing_mask2former.py
     pred_maps = processor.post_process_semantic_segmentation(
         outputs, target_sizes=target_sizes
     )
