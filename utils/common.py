@@ -36,12 +36,13 @@ def preprocess_mask2former_swin(
     pixel_masks = torch.stack([torch.ones_like(img) for img, _ in batch])
 
     # Filter and collect class labels, ignoring the MASK_IGNORE_VALUE
+    # class_labels = [torch.unique(mask) for _, mask in batch]
     class_labels = []
     for _, mask in batch:
         unique_labels = torch.unique(mask)
         # Filter out the ignore value
-        filtered_labels = unique_labels[unique_labels != MASK_IGNORE_VALUE]
-        class_labels.append(filtered_labels)
+        unique_labels[unique_labels == MASK_IGNORE_VALUE] = 0
+        class_labels.append(unique_labels)
 
     mask_labels = []
     # Convert each mask from HxW to CxHxW
@@ -50,6 +51,11 @@ def preprocess_mask2former_swin(
         mask_new = torch.zeros((len(classes_list), mask.shape[0], mask.shape[1]))
 
         for idx, curr in enumerate(classes_list):
+            # Let's have the 0 class dedicated for background
+            if curr == MASK_IGNORE_VALUE:
+                mask_new[0, mask == curr] = 1
+                continue
+
             mask_new[idx, mask == curr] = 1
 
         mask_labels.append(mask_new)
