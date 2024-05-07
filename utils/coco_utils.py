@@ -67,12 +67,44 @@ class COCOUtils:
         filtered_coco_annotation_file = os.path.join(
             self.output_directory, "filtered_coco_json_file.json"
         )
-        with open(filtered_coco_annotation_file, "w") as f:
+
+        sampled_size_json_file = os.path.join(
+            self.output_directory, f"sampled_{target_size_mb}MB.json"
+        )
+        with open(sampled_size_json_file, "w") as f:
             json.dump(filtered_coco_data, f)
 
         # Print the total size of sampled images and the number of sampled images
         print("Total size of sampled images:", total_size_mb, "MB")
         print("Number of sampled images:", num_sampled_images)
+
+    @staticmethod
+    def copy_images_from_coco(coco_json_file, output_directory, input_images_path):
+        # Load COCO JSON file
+        coco = COCO(coco_json_file)
+
+        # Create output directory if it doesn't exist
+        os.makedirs(output_directory, exist_ok=True)
+
+        # Iterate over images in the COCO JSON file
+        for image_info in coco.dataset["images"]:
+            # Get the file name of the image
+            image_filename = image_info["file_name"]
+
+            # Construct the input image path
+            input_image_path = os.path.join(input_images_path, image_filename)
+
+            # Check if the image exists in the input directory
+            if os.path.exists(input_image_path):
+                # Construct the output image path
+                output_image_path = os.path.join(output_directory, image_filename)
+
+                # Copy the image to the output directory
+                shutil.copy(input_image_path, output_image_path)
+            else:
+                print(f"Image '{image_filename}' not found in the input directory.")
+
+        print("Images copied successfully.")
 
     @staticmethod
     def merge_coco_jsons(main_coco, sampled_coco, output_dir=None):
