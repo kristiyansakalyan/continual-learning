@@ -97,8 +97,10 @@ class BaseSegmentDataset(Dataset):
         Dictionary mapping category IDs to category labels.
     categories_to_idx : dict[int, int] | dict[str, dict[int, int]]
         Dictionary mapping category IDs to tensor indices.
-    transform : None | transforms.Compose
-        A composition of transformations to apply to the images.
+    image_transform : transforms.Compose | None, optional
+        A list of transformations to be applied on the images, by default None
+    mask_transform : transforms.Compose | None, optional
+        A list of transformations to be applied on the masks, by default None
     class_mappings: dict[int, int] | None
         Dictionary that maps the classes of the dataset to some other ones
     """
@@ -107,7 +109,8 @@ class BaseSegmentDataset(Dataset):
         self: "BaseSegmentDataset",
         root_folder: str,
         split: Split | None = None,
-        transform: transforms.Compose | None = None,
+        image_transform: transforms.Compose | None = None,
+        mask_transform: transforms.Compose | None = None,
         class_mappings: dict[int, int] | None = None,
     ):
         """The constructor for the CadisDataset.
@@ -119,12 +122,17 @@ class BaseSegmentDataset(Dataset):
         split : Split, optional
             The dataset split to use ('train', 'val', 'test') if available,
             by default None
-        transform : None | transforms.Compose
-            A composition of transformations to apply to the images, by default None
+        image_transform : transforms.Compose | None, optional
+            A list of transformations to be applied on the images, by default None
+        mask_transform : transforms.Compose | None, optional
+            A list of transformations to be applied on the masks, by default None
         """
         self.root_folder = root_folder
         self.split = split
-        self.transform = transform or transforms.Compose([transforms.ToTensor()])
+        self.image_transform = image_transform or transforms.Compose(
+            [transforms.ToTensor()]
+        )
+        self.mask_transform = mask_transform
         self.class_mappings = class_mappings
 
         # Correct root folder?
@@ -160,11 +168,17 @@ class BaseSegmentDataset(Dataset):
         image_info = self.imgs[image_id]
 
         image = Image.open(image_info.path).convert("RGB")
-        image = self.transform(image)
+        image = self.image_transform(image)
 
         mask = self.create_mask(image_info)
+        mask = torch.from_numpy(mask.astype(np.int64))
 
-        return image, torch.from_numpy(mask.astype(np.int64))
+        if self.mask_transform is not None:
+            if mask.ndim == 2:
+                mask = mask[None, ...]
+            mask = self.mask_transform(mask)
+
+        return image, mask
 
     def load_images_and_categories(
         self: "BaseSegmentDataset",
@@ -482,11 +496,17 @@ class Cataract1KDataset(BaseSegmentDataset):
         case = image_info.path.split("/")[-3].replace("_", "")
 
         image = Image.open(image_info.path).convert("RGB")
-        image = self.transform(image)
+        image = self.image_transform(image)
 
         mask = self.create_mask(image_info, case)
+        mask = torch.from_numpy(mask.astype(np.int64))
 
-        return image, torch.from_numpy(mask.astype(np.int64))
+        if self.mask_transform is not None:
+            if mask.ndim == 2:
+                mask = mask[None, ...]
+            mask = self.mask_transform(mask)
+
+        return image, mask
 
     def create_mask(
         self: "BaseSegmentDataset", image_info: ImageInfo, case: str
@@ -621,12 +641,16 @@ class CadisV2Dataset(Dataset):
         self: "CadisV2Dataset",
         root_folder: str,
         split: Split = "train",
-        transform: transforms.Compose | None = None,
+        image_transform: transforms.Compose | None = None,
+        mask_transform: transforms.Compose | None = None,
         class_mappings: dict[int, int] | None = None,
     ):
         self.root_folder = root_folder
         self.split = split
-        self.transform = transform or transforms.Compose([transforms.ToTensor()])
+        self.image_transform = image_transform or transforms.Compose(
+            [transforms.ToTensor()]
+        )
+        self.mask_transform = mask_transform
         self.class_mappings = class_mappings
 
         # Correct root folder?
@@ -704,7 +728,7 @@ class CadisV2Dataset(Dataset):
         image_info = self.data[idx]
 
         image = cv2.imread(image_info.img_path)
-        image = self.transform(image)
+        image = self.image_transform(image)
 
         mask = cv2.imread(image_info.mask_path, cv2.COLOR_BGR2GRAY)
         mask = (F.to_tensor(mask) * 255).to(torch.int32).squeeze(0)
@@ -716,5 +740,11 @@ class CadisV2Dataset(Dataset):
                     mapped_mask[mask == cadis_id] = zeiss_id
 
             mask = mapped_mask
+
+        if self.mask_transform is not None:
+            if mask.ndim == 2:
+                mask = mask[None, ...]
+
+            mask = self.mask_transform(mask)
 
         return image, mask

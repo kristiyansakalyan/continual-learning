@@ -139,7 +139,7 @@ ZEISS_TO_CADISV2 = {
     8: [15],
     9: [14],
     10: [0],
-    11: [4],#[6],
+    11: [4],  # [6],
 }
 
 ZEISS_CATEGORIES = {
@@ -220,7 +220,8 @@ def get_cadis_dataset(
 
 def get_cadisv2_dataset(
     root_folder: str,
-    transform: transforms.Compose | None = None,
+    image_transform: transforms.Compose | None = None,
+    mask_transform: transforms.Compose | None = None,
     domain_incremental: bool = False,
     class_incremental: bool = False,
 ) -> list[CadisV2Dataset]:
@@ -231,8 +232,10 @@ def get_cadisv2_dataset(
     ----------
     root_folder : str
         The directory path where the dataset files are stored.
-    transform : transforms.Compose | None, optional
+    image_transform : transforms.Compose | None, optional
         A list of transformations to be applied on the images, by default None
+    mask_transform : transforms.Compose | None, optional
+        A list of transformations to be applied on the masks, by default None
     domain_incremental : bool, optional
         A flag to determine whether to setup the dataset for domain incremental learning,
         by default False.
@@ -263,7 +266,8 @@ def get_cadisv2_dataset(
         CadisV2Dataset(
             root_folder=root_folder,
             split=split,
-            transform=transform,
+            image_transform=image_transform,
+            mask_transform=mask_transform,
             class_mappings=class_mappings,
         )
         for split in ["train", "val", "test"]
@@ -274,7 +278,8 @@ def get_cadisv2_dataset(
 def get_cataract1k_dataset(
     root_folder: str,
     split_ratios: tuple[float, float] = [0.8, 0.1],
-    transform: transforms.Compose | None = None,
+    image_transform: transforms.Compose | None = None,
+    mask_transform: transforms.Compose | None = None,
     domain_incremental: bool = False,
     class_incremental: bool = False,
 ) -> list[Cataract1KDataset]:
@@ -289,6 +294,10 @@ def get_cataract1k_dataset(
     split_ratios : tuple[float, float], optional
         The split ratios to be used for the splits ('train', 'val').
         The ratio for test will be infered from the rest, by default [0.8, 0.1]
+    image_transform : transforms.Compose | None, optional
+        A list of transformations to be applied on the images, by default None
+    mask_transform : transforms.Compose | None, optional
+        A list of transformations to be applied on the masks, by default None
     domain_incremental : bool, optional
         A flag to determine whether to setup the dataset for domain incremental learning,
         by default False.
@@ -320,7 +329,8 @@ def get_cataract1k_dataset(
 
     dataset = Cataract1KDataset(
         root_folder=root_folder,
-        transform=transform,
+        image_transform=image_transform,
+        mask_transform=mask_transform,
         class_mappings=class_mappings,
     )
 
