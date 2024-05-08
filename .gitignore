@@ -6,6 +6,9 @@ sampled_images
 # Data
 data
 
+# WandB data
+wandb
+
 # MacOS
 .DS_Store
 
