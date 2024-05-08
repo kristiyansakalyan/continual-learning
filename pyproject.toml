@@ -20,6 +20,7 @@ synapseclient = "^4.2.0"
 python-dotenv = "^1.0.1"
 pandas = "^2.2.2"
 pycocotools = ">=2.0.2"
+wandb = "^0.17.0"
 
 
 [tool.poetry.group.dev.dependencies]

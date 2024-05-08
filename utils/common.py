@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from transformers import AutoImageProcessor
 
-MASK_IGNORE_VALUE = 255
+BG_VALUE = 0
 
 
 def set_seed(seed: int) -> None:
@@ -41,7 +41,7 @@ def preprocess_mask2former_swin(
     for _, mask in batch:
         unique_labels = torch.unique(mask)
         # Filter out the ignore value
-        unique_labels[unique_labels == MASK_IGNORE_VALUE] = 0
+        unique_labels[unique_labels == BG_VALUE] = 0
         class_labels.append(unique_labels)
 
     mask_labels = []
@@ -52,7 +52,7 @@ def preprocess_mask2former_swin(
 
         for idx, curr in enumerate(classes_list):
             # Let's have the 0 class dedicated for background
-            if curr == MASK_IGNORE_VALUE:
+            if curr == BG_VALUE:
                 mask_new[0, mask == curr] = 1
                 continue
 
@@ -100,7 +100,7 @@ def _preprocess_mask2former(
 # Preporcessor
 mask2former_auto_image_processor = AutoImageProcessor.from_pretrained(
     "facebook/mask2former-swin-large-ade-semantic",
-    ignore_index=MASK_IGNORE_VALUE,
+    ignore_index=BG_VALUE,
     reduce_labels=False,
 )
 
@@ -153,7 +153,7 @@ def m2f_extract_pred_maps_and_masks(
     # Fill the output mask with the category values
     for category_list, curr_mask in zip(batch["class_labels"], batch["mask_labels"]):
         output_mask = torch.full(
-            (curr_mask.shape[1], curr_mask.shape[2]), 255, dtype=torch.int32
+            (curr_mask.shape[1], curr_mask.shape[2]), BG_VALUE, dtype=torch.int32
         )
 
         for i, category in enumerate(category_list):
@@ -162,3 +162,20 @@ def m2f_extract_pred_maps_and_masks(
         masks.append(output_mask)
 
     return pred_maps, masks
+
+
+def m2f_dataset_collate(examples):
+    # Get the pixel values, pixel mask, mask labels, and class labels
+    pixel_values = torch.stack(
+        [example["pixel_values"].squeeze(0) for example in examples]
+    )
+    pixel_mask = torch.stack([example["pixel_mask"].squeeze(0) for example in examples])
+    mask_labels = [example["mask_labels"][0] for example in examples]
+    class_labels = [example["class_labels"][0] for example in examples]
+    # Return a dictionary of all the collated features
+    return {
+        "pixel_values": pixel_values,
+        "pixel_mask": pixel_mask,
+        "mask_labels": mask_labels,
+        "class_labels": class_labels,
+    }

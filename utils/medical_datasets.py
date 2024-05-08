@@ -11,8 +11,9 @@ from numpy.typing import NDArray
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
+from transformers import Mask2FormerImageProcessor
 
-from utils.common import MASK_IGNORE_VALUE
+from utils.common import BG_VALUE
 
 Split = Literal["train", "val", "test"]
 
@@ -218,7 +219,7 @@ class BaseSegmentDataset(Dataset):
         W = image_info.width
 
         mask = np.full(
-            (H, W), MASK_IGNORE_VALUE, dtype=np.int32
+            (H, W), BG_VALUE, dtype=np.int32
         )  # Only one channel needed, with default class index 255 (background)
 
         for polygon_list, category in zip(polygons, categories):
@@ -544,7 +545,7 @@ class Cataract1KDataset(BaseSegmentDataset):
         W = image_info.width
 
         mask = np.full(
-            (H, W), MASK_IGNORE_VALUE, dtype=np.int32
+            (H, W), BG_VALUE, dtype=np.int32
         )  # Only one channel needed, with default class index 255 (background)
 
         # Define a custom sorting function where Polygons are filled first for
@@ -644,7 +645,7 @@ class CadisV2Dataset(Dataset):
         image_transform: transforms.Compose | None = None,
         mask_transform: transforms.Compose | None = None,
         class_mappings: dict[int, int] | None = None,
-    ):
+    ) -> None:
         self.root_folder = root_folder
         self.split = split
         self.image_transform = image_transform or transforms.Compose(
@@ -734,7 +735,7 @@ class CadisV2Dataset(Dataset):
         mask = (F.to_tensor(mask) * 255).to(torch.int32).squeeze(0)
 
         if self.class_mappings is not None:
-            mapped_mask = torch.full_like(mask, MASK_IGNORE_VALUE)
+            mapped_mask = torch.full_like(mask, BG_VALUE)
             for zeiss_id, values in self.class_mappings.items():
                 for cadis_id in values:
                     mapped_mask[mask == cadis_id] = zeiss_id
@@ -748,3 +749,27 @@ class CadisV2Dataset(Dataset):
             mask = self.mask_transform(mask)
 
         return image, mask
+
+
+class Mask2FormerDataset(Dataset):
+
+    def __init__(
+        self,
+        dataset: BaseSegmentDataset | CadisV2Dataset,
+        processor: Mask2FormerImageProcessor,
+    ) -> None:
+        self.dataset = dataset
+        self.processor = processor
+
+    def __len__(self) -> int:
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        img, mask = self.dataset[idx]
+
+        return self.processor(
+            images=[img],
+            segmentation_maps=[mask],
+            return_tensors="pt",
+            do_rescale=False,
+        )
