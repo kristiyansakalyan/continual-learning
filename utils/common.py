@@ -8,6 +8,15 @@ from transformers import AutoImageProcessor
 
 BG_VALUE = 0
 
+CADIS_PIXEL_MEAN = [0.19539664, 0.34606268, 0.57365116]
+CADIS_PIXEL_STD = [0.10581223, 0.15655205, 0.15996183]
+CAT1K_PIXEL_MEAN = [0.31471357, 0.28789882, 0.21170666]
+CAT1K_PIXEL_STD = [0.30179095, 0.25651723, 0.22381977]
+FULL_MERGE_PIXEL_MEAN = [0.24733756, 0.32074284, 0.41608986]
+FULL_MERGE_PIXEL_STD = [0.22241797, 0.20812395, 0.26164718]
+REPLAY32_PIXEL_MEAN = [0.31373545, 0.2885269, 0.21493057]
+REPLAY32_PIXEL_STD = [0.30081911, 0.25588435, 0.22596268]
+
 
 def set_seed(seed: int) -> None:
     """Set the random seed for reproducibility.
@@ -20,6 +29,21 @@ def set_seed(seed: int) -> None:
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
+
+
+def pixel_mean_std(dataset):
+    sum_channels = np.zeros(3)
+    sum_squares_channels = np.zeros(3)
+    count_pixels = 0
+    for im, _ in dataset:
+        img = im.permute(1, 2, 0).numpy()
+        sum_channels += np.sum(img, axis=(0, 1))
+        sum_squares_channels += np.sum(img**2, axis=(0, 1))
+        count_pixels += img.shape[0] * img.shape[1]
+    pixel_mean = sum_channels / count_pixels
+    pixel_std = np.sqrt((sum_squares_channels / count_pixels) - pixel_mean**2)
+
+    return pixel_mean, pixel_std
 
 
 class Mask2FormerBatch(NamedTuple):

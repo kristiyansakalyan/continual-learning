@@ -7,9 +7,9 @@ from utils.medical_datasets import CadisDataset, CadisV2Dataset, Cataract1KDatas
 """
 TODO: 
   Class incremental
-    - Intraocular Lens→ not available → E1: Intraocular Lens
-    - not available → Viter. handpiece → E2: Viter. handpiece
-    - not available → Suture needle → E3: Suture needle
+    - Intraocular Lensâ†’ not available â†’ E1: Intraocular Lens
+    - not available â†’ Viter. handpiece â†’ E2: Viter. handpiece
+    - not available â†’ Suture needle â†’ E3: Suture needle
 """
 
 CADIS_CATEGORIES = {
@@ -74,6 +74,7 @@ CATARACT1K_CATEGORIES = {
     14: "Capsulorhexis Cystotome",
     15: "Gauge",
 }
+
 
 ZEISS_TO_CATARACT1K = {
     1: [10, 12],
@@ -224,6 +225,7 @@ def get_cadisv2_dataset(
     mask_transform: transforms.Compose | None = None,
     domain_incremental: bool = False,
     class_incremental: bool = False,
+    return_path: bool = False,
 ) -> list[CadisV2Dataset]:
     """Creates a list of CadisDataset objects for train,
     validation, and test splits from a specified root folder.
@@ -269,6 +271,7 @@ def get_cadisv2_dataset(
             image_transform=image_transform,
             mask_transform=mask_transform,
             class_mappings=class_mappings,
+            return_path=return_path,
         )
         for split in ["train", "val", "test"]
     ]
@@ -282,6 +285,7 @@ def get_cataract1k_dataset(
     mask_transform: transforms.Compose | None = None,
     domain_incremental: bool = False,
     class_incremental: bool = False,
+    return_path: bool = False,
 ) -> list[Cataract1KDataset]:
     """Creates a list of CadisDataset objects for train,
     validation, and test splits from a specified root folder
@@ -332,6 +336,7 @@ def get_cataract1k_dataset(
         image_transform=image_transform,
         mask_transform=mask_transform,
         class_mappings=class_mappings,
+        return_path=return_path,
     )
 
     train_ratio, val_ratio = split_ratios
