@@ -113,6 +113,7 @@ class BaseSegmentDataset(Dataset):
         image_transform: transforms.Compose | None = None,
         mask_transform: transforms.Compose | None = None,
         class_mappings: dict[int, int] | None = None,
+        return_path: True | False = False,
     ):
         """The constructor for the CadisDataset.
 
@@ -131,11 +132,17 @@ class BaseSegmentDataset(Dataset):
         self.root_folder = root_folder
         self.split = split
         self.image_transform = image_transform or transforms.Compose(
-            [transforms.ToTensor()]
+            [transforms.ToTensor(), transforms.Resize((270, 480))]
         )
-        self.mask_transform = mask_transform
+        self.mask_transform = mask_transform or transforms.Compose(
+            [
+                transforms.Resize(
+                    (270, 480), interpolation=transforms.InterpolationMode.NEAREST
+                )
+            ]
+        )
         self.class_mappings = class_mappings
-
+        self.return_path = return_path
         # Correct root folder?
         if not os.path.exists(self.root_folder):
             raise FileNotFoundError(
@@ -506,8 +513,10 @@ class Cataract1KDataset(BaseSegmentDataset):
             if mask.ndim == 2:
                 mask = mask[None, ...]
             mask = self.mask_transform(mask)
-
-        return image, mask
+        if self.return_path:
+            return image, mask, image_info.path
+        else:
+            return image, mask
 
     def create_mask(
         self: "BaseSegmentDataset", image_info: ImageInfo, case: str
@@ -645,15 +654,22 @@ class CadisV2Dataset(Dataset):
         image_transform: transforms.Compose | None = None,
         mask_transform: transforms.Compose | None = None,
         class_mappings: dict[int, int] | None = None,
+        return_path: True | False = False,
     ) -> None:
         self.root_folder = root_folder
         self.split = split
         self.image_transform = image_transform or transforms.Compose(
-            [transforms.ToTensor()]
+            [transforms.ToTensor(), transforms.Resize((270, 480))]
         )
-        self.mask_transform = mask_transform
+        self.mask_transform = mask_transform or transforms.Compose(
+            [
+                transforms.Resize(
+                    (270, 480), interpolation=transforms.InterpolationMode.NEAREST
+                )
+            ]
+        )
         self.class_mappings = class_mappings
-
+        self.return_path = return_path
         # Correct root folder?
         if not os.path.exists(self.root_folder):
             raise FileNotFoundError(
@@ -729,11 +745,11 @@ class CadisV2Dataset(Dataset):
         image_info = self.data[idx]
 
         image = cv2.imread(image_info.img_path)
+
         image = self.image_transform(image)
 
         mask = cv2.imread(image_info.mask_path, cv2.COLOR_BGR2GRAY)
         mask = (F.to_tensor(mask) * 255).to(torch.int32).squeeze(0)
-
         if self.class_mappings is not None:
             mapped_mask = torch.full_like(mask, BG_VALUE)
             for zeiss_id, values in self.class_mappings.items():
@@ -746,9 +762,11 @@ class CadisV2Dataset(Dataset):
             if mask.ndim == 2:
                 mask = mask[None, ...]
 
-            mask = self.mask_transform(mask)
-
-        return image, mask
+            mask = self.mask_transform(mask).squeeze()
+        if self.return_path:
+            return image, mask, image_info.img_path
+        else:
+            return image, mask
 
 
 class Mask2FormerDataset(Dataset):
