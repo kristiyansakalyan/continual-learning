@@ -512,7 +512,7 @@ class Cataract1KDataset(BaseSegmentDataset):
         if self.mask_transform is not None:
             if mask.ndim == 2:
                 mask = mask[None, ...]
-            mask = self.mask_transform(mask)
+            mask = self.mask_transform(mask).squeeze()
         if self.return_path:
             return image, mask, image_info.path
         else:
