@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from transformers import AutoImageProcessor
 
-BG_VALUE = 0
+BG_VALUE_255 = 255 #0
 
 CADIS_PIXEL_MEAN = [0.19539664, 0.34606268, 0.57365116]
 CADIS_PIXEL_STD = [0.10581223, 0.15655205, 0.15996183]
@@ -65,7 +65,7 @@ def preprocess_mask2former_swin(
     for _, mask in batch:
         unique_labels = torch.unique(mask)
         # Filter out the ignore value
-        unique_labels[unique_labels == BG_VALUE] = 0
+        unique_labels[unique_labels == BG_VALUE_255] = 0
         class_labels.append(unique_labels)
 
     mask_labels = []
@@ -76,7 +76,7 @@ def preprocess_mask2former_swin(
 
         for idx, curr in enumerate(classes_list):
             # Let's have the 0 class dedicated for background
-            if curr == BG_VALUE:
+            if curr == BG_VALUE_255:
                 mask_new[0, mask == curr] = 1
                 continue
 
@@ -124,7 +124,7 @@ def _preprocess_mask2former(
 # Preporcessor
 mask2former_auto_image_processor = AutoImageProcessor.from_pretrained(
     "facebook/mask2former-swin-large-ade-semantic",
-    ignore_index=BG_VALUE,
+    ignore_index=BG_VALUE_255,
     reduce_labels=False,
 )
 
@@ -177,7 +177,7 @@ def m2f_extract_pred_maps_and_masks(
     # Fill the output mask with the category values
     for category_list, curr_mask in zip(batch["class_labels"], batch["mask_labels"]):
         output_mask = torch.full(
-            (curr_mask.shape[1], curr_mask.shape[2]), BG_VALUE, dtype=torch.int32
+            (curr_mask.shape[1], curr_mask.shape[2]), BG_VALUE_255, dtype=torch.int32
         )
 
         for i, category in enumerate(category_list):
