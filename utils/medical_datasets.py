@@ -13,8 +13,8 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 from transformers import Mask2FormerImageProcessor
 
-from utils.common import BG_VALUE
-
+#from utils.common import BG_VALUE
+BG_VALUE_0=0
 Split = Literal["train", "val", "test"]
 
 CADIS_SPLIT_TO_FILE: dict[Split, str] = {
@@ -226,8 +226,8 @@ class BaseSegmentDataset(Dataset):
         W = image_info.width
 
         mask = np.full(
-            (H, W), BG_VALUE, dtype=np.int32
-        )  # Only one channel needed, with default class index 255 (background)
+            (H, W), BG_VALUE_0, dtype=np.int32
+        )  # Only one channel needed, with default class index 0 (not 255 anymore!) (background)
 
         for polygon_list, category in zip(polygons, categories):
             # One category might have multiple polygons
@@ -315,8 +315,8 @@ class BaseSegmentDataset(Dataset):
         }
 
         categories = {idx: cat["name"] for idx, cat in enumerate(data["categories"])}
-        categories[255] = "Background"
-
+        #categories[255] = "Background"
+        categories[0] = "Background"
         return images, categories_to_idx, categories
 
 
@@ -479,8 +479,8 @@ class Cataract1KDataset(BaseSegmentDataset):
                 CATARACT_1K_CATEGORIES.keys(), CATARACT_1K_CATEGORIES.values()
             )
         }
-        categories[255] = "Background"
-
+        #categories[255] = "Background"
+        categories[0] = "Background"
         return images, case_cat_to_idx, categories
 
     def __getitem__(
@@ -554,8 +554,8 @@ class Cataract1KDataset(BaseSegmentDataset):
         W = image_info.width
 
         mask = np.full(
-            (H, W), BG_VALUE, dtype=np.int32
-        )  # Only one channel needed, with default class index 255 (background)
+            (H, W), BG_VALUE_0, dtype=np.int32
+        )  # Only one channel needed, with default class index 0 (not 255 anymore!) (background)
 
         # Define a custom sorting function where Polygons are filled first for
         # cornea () and then p
@@ -721,8 +721,9 @@ class CadisV2Dataset(Dataset):
             pd.read_csv(classes_path).set_index("Index")["Class"].to_dict()
         )
 
-        self.categories[255] = "Background"
-
+        #self.categories[255] = "Background"
+        self.categories[0] = "Background"
+        
     def __len__(self: "BaseSegmentDataset") -> int:
         """Returns the number of images in the dataset."""
         return len(self.data)
@@ -751,7 +752,7 @@ class CadisV2Dataset(Dataset):
         mask = cv2.imread(image_info.mask_path, cv2.COLOR_BGR2GRAY)
         mask = (F.to_tensor(mask) * 255).to(torch.int32).squeeze(0)
         if self.class_mappings is not None:
-            mapped_mask = torch.full_like(mask, BG_VALUE)
+            mapped_mask = torch.full_like(mask, BG_VALUE_0)
             for zeiss_id, values in self.class_mappings.items():
                 for cadis_id in values:
                     mapped_mask[mask == cadis_id] = zeiss_id
