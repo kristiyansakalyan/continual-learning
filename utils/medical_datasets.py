@@ -777,9 +777,11 @@ class Mask2FormerDataset(Dataset):
         self,
         dataset: BaseSegmentDataset | CadisV2Dataset,
         processor: Mask2FormerImageProcessor,
+        transform: transforms.Compose | None = None,
     ) -> None:
         self.dataset = dataset
         self.processor = processor
+        self.transform = transform
 
     def __len__(self) -> int:
         return len(self.dataset)
@@ -787,9 +789,14 @@ class Mask2FormerDataset(Dataset):
     def __getitem__(self, idx):
         img, mask = self.dataset[idx]
 
-        return self.processor(
+        batch = self.processor(
             images=[img],
             segmentation_maps=[mask],
             return_tensors="pt",
             do_rescale=False,
         )
+
+        if self.transform is not None:
+            batch["pixel_values"] = self.transform(batch["pixel_values"])
+
+        return batch
