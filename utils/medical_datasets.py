@@ -13,8 +13,8 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 from transformers import Mask2FormerImageProcessor
 
-#from utils.common import BG_VALUE
-BG_VALUE_0=0
+# from utils.common import BG_VALUE
+BG_VALUE_0 = 0
 Split = Literal["train", "val", "test"]
 
 CADIS_SPLIT_TO_FILE: dict[Split, str] = {
@@ -315,7 +315,7 @@ class BaseSegmentDataset(Dataset):
         }
 
         categories = {idx: cat["name"] for idx, cat in enumerate(data["categories"])}
-        #categories[255] = "Background"
+        # categories[255] = "Background"
         categories[0] = "Background"
         return images, categories_to_idx, categories
 
@@ -479,7 +479,7 @@ class Cataract1KDataset(BaseSegmentDataset):
                 CATARACT_1K_CATEGORIES.keys(), CATARACT_1K_CATEGORIES.values()
             )
         }
-        #categories[255] = "Background"
+        # categories[255] = "Background"
         categories[0] = "Background"
         return images, case_cat_to_idx, categories
 
@@ -721,9 +721,9 @@ class CadisV2Dataset(Dataset):
             pd.read_csv(classes_path).set_index("Index")["Class"].to_dict()
         )
 
-        #self.categories[255] = "Background"
+        # self.categories[255] = "Background"
         self.categories[0] = "Background"
-        
+
     def __len__(self: "BaseSegmentDataset") -> int:
         """Returns the number of images in the dataset."""
         return len(self.data)
@@ -746,6 +746,7 @@ class CadisV2Dataset(Dataset):
         image_info = self.data[idx]
 
         image = cv2.imread(image_info.img_path)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
         image = self.image_transform(image)
 
