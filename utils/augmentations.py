@@ -64,6 +64,12 @@ train_transforms_noise = transforms.Compose(
         RandomChannelRearrangement(),
     ]
 )
+train_transforms_noise_no_distortion = transforms.Compose(
+    [
+        transforms.ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.1),
+        transforms.RandomApply([GaussianNoise(mean=0.0, std=0.1)], p=0.5),
+    ]
+)
 train_transforms_blur = transforms.Compose(
     [
         transforms.ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.1),
