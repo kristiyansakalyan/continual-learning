@@ -179,7 +179,7 @@ class BaseSegmentDataset(Dataset):
         image = self.image_transform(image)
 
         mask = self.create_mask(image_info)
-        mask = torch.from_numpy(mask.astype(np.int64))
+        mask = torch.from_numpy(mask.astype(np.int32))
 
         if self.mask_transform is not None:
             if mask.ndim == 2:
@@ -507,7 +507,7 @@ class Cataract1KDataset(BaseSegmentDataset):
         image = self.image_transform(image)
 
         mask = self.create_mask(image_info, case)
-        mask = torch.from_numpy(mask.astype(np.int64))
+        mask = torch.from_numpy(mask.astype(np.int32))
 
         if self.mask_transform is not None:
             if mask.ndim == 2:
