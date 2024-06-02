@@ -30,6 +30,13 @@ def set_seed(seed: int) -> None:
     np.random.seed(seed)
     random.seed(seed)
 
+    torch.cuda.manual_seed(seed)
+    # When running on the CuDNN backend, two further options must be set
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+    print(f"Random seed set as {seed}")
+
 
 def pixel_mean_std(dataset):
     sum_channels = np.zeros(3)
