@@ -76,6 +76,8 @@ CATARACT1K_CATEGORIES = {
 }
 
 
+# 11 Iris => 10 Pupil => All the rest
+
 ZEISS_TO_CATARACT1K = {
     1: [10, 12],
     2: [2],

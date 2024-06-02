@@ -565,12 +565,15 @@ class Cataract1KDataset(BaseSegmentDataset):
             cornea (id=4) and then pupil (id=3)
             """
             category = item[1]
-            if category == 4:
-                return 0  # Sort 3 after 4
-            elif category == 3:
-                return 1  # Sort 4 before 3
+            if category == 1 or category == 3:
+                return 0  # Iris first
+            elif category == 8 or category == 11:
+                return 1  # Pupil second
             else:
-                return 2  # Sort others after 3 and 4
+                # All the rest should be on top and we can add 2
+                # as they start from 1 to make sure they will be sorted after
+                # the iris and pupil.
+                return category + 1
 
         sorted_data = sorted(zip(polygons, categories), key=custom_sort)
 
