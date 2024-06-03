@@ -1,4 +1,7 @@
+from typing import Dict, List, Optional, Tuple
+
 import torch
+from torch import Tensor
 from transformers import Mask2FormerForUniversalSegmentation
 
 
