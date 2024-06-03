@@ -22,7 +22,7 @@ def log_table_of_images(
     for INDEX in range(batch_size):
         img = (
             (
-                (pixel_values[INDEX, ...] * pixel_std.reshape(3, 1, 1))
+                (pixel_values[INDEX, ...].cpu() * pixel_std.reshape(3, 1, 1))
                 + pixel_mean.reshape(3, 1, 1)
             )
             .permute(1, 2, 0)

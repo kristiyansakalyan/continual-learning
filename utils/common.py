@@ -6,8 +6,8 @@ import numpy as np
 import torch
 from transformers import AutoImageProcessor
 
-BG_VALUE_255 = 255  # 0
-
+# BG_VALUE_255 = 255  # 0
+BG_VALUE_0 = 0
 CADIS_PIXEL_MEAN = [0.57365126, 0.34606295, 0.19539679]
 CADIS_PIXEL_STD = [0.15933991, 0.15584118, 0.10485045]
 CAT1K_PIXEL_MEAN = [0.31471649, 0.28790466, 0.21170973]
@@ -188,7 +188,7 @@ def m2f_extract_pred_maps_and_masks(
     # Fill the output mask with the category values
     for category_list, curr_mask in zip(batch["class_labels"], batch["mask_labels"]):
         output_mask = torch.full(
-            (curr_mask.shape[1], curr_mask.shape[2]), BG_VALUE_255, dtype=torch.int32
+            (curr_mask.shape[1], curr_mask.shape[2]), BG_VALUE_0, dtype=torch.int32
         )
 
         for i, category in enumerate(category_list):
