@@ -70,7 +70,7 @@ NEW_COLORS = [
 
 
 def overlay_mask_on_image(
-    image: torch.Tensor, mask: torch.Tensor, alpha: float = 0.8
+    image: torch.Tensor, mask: torch.Tensor, alpha: float = 0.4
 ) -> None:
     """
     Overlay a multiclass mask on an image using class indices.
@@ -114,11 +114,10 @@ def overlay_mask_on_image(
             overlay[class_mask] = NEW_COLORS[class_index % len(COLORS)]
 
     overlay /= 255.0
-
     # Blend original and overlay; This results in a little warning regarding
     # the colors but I think that it makes the segmentation easier to see.
     # If you change 1 to 1 - alpha instead, it will resolve the warning
-    display_image = cv2.addWeighted(image, 1, overlay, alpha, 0)
+    display_image = cv2.addWeighted(image, 1 - alpha, overlay, alpha, 0)
 
     # Display the result using matplotlib
     plt.figure(figsize=(10, 10))

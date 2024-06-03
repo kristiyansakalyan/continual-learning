@@ -4,7 +4,7 @@ from torchvision.transforms.functional import to_pil_image
 import wandb
 from utils.dataset_utils import ZEISS_CATEGORIES
 
-ZEISS_WITH_BG = ZEISS_CATEGORIES
+ZEISS_WITH_BG = ZEISS_CATEGORIES.copy()
 BG = 0
 ZEISS_WITH_BG[BG] = "Background"
 
