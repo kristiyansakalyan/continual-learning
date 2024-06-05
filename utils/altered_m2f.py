@@ -2,45 +2,139 @@ from typing import Dict, List, Optional, Tuple
 
 import torch
 from torch import Tensor
-from transformers import Mask2FormerForUniversalSegmentation
+from transformers import (
+    Mask2FormerForUniversalSegmentation,
+    Mask2FormerForUniversalSegmentationOutput,
+    Mask2FormerModelOutput,
+)
 
 
 class CustomMask2Former(Mask2FormerForUniversalSegmentation):
     def forward(
         self,
-        latent_vectors: Tensor,
+        pixel_values: Tensor,
         mask_labels: List[Tensor],
         class_labels: List[Tensor],
         pixel_mask: Tensor,
+        old_latent_vectors: Optional[Tensor] = None,
+        old_mask_labels: Optional[List[Tensor]] = None,
+        old_class_labels: Optional[List[Tensor]] = None,
+        old_pixel_mask: Optional[Tensor] = None,
         **kwargs
     ):
+        output_hidden_states = True
+        output_attentions = True
 
-        # Accessing class variables
-        config = self.config
-        backbone = self.model.pixel_level_module.encoder
-        pixel_level_encoder = self.model.pixel_level_module.encoder
-        pixel_level_decoder = self.model.pixel_level_module.decoder
-        transformer_module = self.model.transformer_module  # Transformer module
+        if (
+            (old_latent_vectors != None)
+            and (old_mask_labels != None)
+            and (old_class_labels != None)
+            and (old_pixel_mask != None)
+        ):
 
-        decoder_output = self.decoder(
-            backbone_features, output_hidden_states=output_hidden_states
-        )
+            new_latent_vectors = self.model.model.pixel_level_module.encoder(
+                pixel_values
+            ).feature_maps
+            backbone_features = torch.cat(
+                (new_latent_vectors, old_latent_vectors), dim=0
+            ).to(device)
+            decoder_output = self.model.model.pixel_level_module.decoder(
+                backbone_features, output_hidden_states=output_hidden_states
+            )
 
-        # Example: Adding custom loss calculation using original loss functions
-        original_loss_fn = self.loss
+            encoder_last_hidden_state = (backbone_features[-1],)
+            encoder_hidden_states = (
+                tuple(backbone_features) if output_hidden_states else None,
+            )
+            decoder_last_hidden_state = (decoder_output.mask_features,)
+            decoder_hidden_states = (decoder_output.multi_scale_features,)
 
-        # For example purposes, let's say we have some dummy targets
-        dummy_targets = torch.randint(
-            0, 2, (pixel_values.size(0), pixel_values.size(2), pixel_values.size(3))
-        )
+            concat_pixel_mask = torch.cat(
+                (batch["pixel_mask"], old_pixel_mask), dim=0
+            ).to(device)
+            concat_mask_labels = batch["mask_labels"].extend(old_mask_labels)
+            concat_class_labels = batch["class_labels"].extend(old_class_labels)
 
-        # Compute original loss (this is just an example, the actual implementation depends on your task)
-        custom_loss = original_loss_fn(outputs.logits, dummy_targets)
+            transformer_module_output = self.model.model.transformer_module(
+                multi_scale_features=decoder_hidden_states,
+                mask_features=decoder_last_hidden_state,
+                output_hidden_states=True,
+                output_attentions=output_attentions,
+            )
 
-        return {
-            "logits": outputs.logits,
-            "loss": custom_loss,
-            "additional_output": torch.randn(
-                outputs.logits.size()
-            ),  # Dummy additional output
-        }
+            pixel_decoder_hidden_states = None
+            transformer_decoder_hidden_states = None
+            transformer_decoder_intermediate_states = None
+
+            if output_hidden_states:
+                pixel_decoder_hidden_states = decoder_hidden_states
+                transformer_decoder_hidden_states = (
+                    transformer_module_output.hidden_states
+                )
+                transformer_decoder_intermediate_states = (
+                    transformer_module_output.intermediate_hidden_states
+                )
+
+            outputs = Mask2FormerModelOutput(
+                encoder_last_hidden_state=encoder_last_hidden_state,
+                pixel_decoder_last_hidden_state=decoder_last_hidden_state,
+                transformer_decoder_last_hidden_state=transformer_module_output.last_hidden_state,
+                encoder_hidden_states=encoder_hidden_states,
+                pixel_decoder_hidden_states=pixel_decoder_hidden_states,
+                transformer_decoder_hidden_states=transformer_decoder_hidden_states,
+                transformer_decoder_intermediate_states=transformer_decoder_intermediate_states,
+                attentions=transformer_module_output.attentions,
+                masks_queries_logits=transformer_module_output.masks_queries_logits,
+            )
+
+            loss, loss_dict, auxiliary_logits = None, None, None
+            class_queries_logits = ()
+
+            for decoder_output in outputs.transformer_decoder_intermediate_states:
+                class_prediction = self.class_predictor(decoder_output.transpose(0, 1))
+                class_queries_logits += (class_prediction,)
+
+            masks_queries_logits = outputs.masks_queries_logits
+
+            auxiliary_logits = self.get_auxiliary_logits(
+                class_queries_logits, masks_queries_logits
+            )
+
+            if concat_mask_labels is not None and concat_class_labels is not None:
+                loss_dict = self.get_loss_dict(
+                    masks_queries_logits=masks_queries_logits[-1],
+                    class_queries_logits=class_queries_logits[-1],
+                    mask_labels=concat_mask_labels,
+                    class_labels=concat_class_labels,
+                    auxiliary_predictions=auxiliary_logits,
+                )
+                loss = self.get_loss(loss_dict)
+
+            output_auxiliary_logits = (
+                self.config.output_auxiliary_logits
+                if output_auxiliary_logits is None
+                else output_auxiliary_logits
+            )
+            if not output_auxiliary_logits:
+                auxiliary_logits = None
+
+            output = Mask2FormerForUniversalSegmentationOutput(
+                loss=loss,
+                class_queries_logits=class_queries_logits[-1],
+                masks_queries_logits=masks_queries_logits[-1],
+                auxiliary_logits=auxiliary_logits,
+                encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+                pixel_decoder_last_hidden_state=outputs.pixel_decoder_last_hidden_state,
+                transformer_decoder_last_hidden_state=outputs.transformer_decoder_last_hidden_state,
+                encoder_hidden_states=encoder_hidden_states,
+                pixel_decoder_hidden_states=pixel_decoder_hidden_states,
+                transformer_decoder_hidden_states=transformer_decoder_hidden_states,
+                attentions=outputs.attentions,
+            )
+
+        else:
+            output = super().forward(
+                pixel_values, mask_labels, class_labels, pixel_mask
+            )
+
+            return output
