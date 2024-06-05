@@ -2,7 +2,7 @@ from typing import Dict, List, Optional, Tuple
 
 import torch
 from torch import Tensor
-from transformers import (
+from transformers.models.mask2former.modeling_mask2former import (
     Mask2FormerForUniversalSegmentation,
     Mask2FormerForUniversalSegmentationOutput,
     Mask2FormerModelOutput,
@@ -25,6 +25,7 @@ class CustomMask2Former(Mask2FormerForUniversalSegmentation):
         output_hidden_states = True
         output_attentions = True
 
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         if (
             (old_latent_vectors != None)
             and (old_mask_labels != None)
@@ -32,13 +33,31 @@ class CustomMask2Former(Mask2FormerForUniversalSegmentation):
             and (old_pixel_mask != None)
         ):
 
-            new_latent_vectors = self.model.model.pixel_level_module.encoder(
+            new_latent_vectors = self.model.pixel_level_module.encoder(
                 pixel_values
             ).feature_maps
-            backbone_features = torch.cat(
-                (new_latent_vectors, old_latent_vectors), dim=0
+
+            backbone_features_1 = torch.cat(
+                (new_latent_vectors[0], old_latent_vectors[0]), dim=0
             ).to(device)
-            decoder_output = self.model.model.pixel_level_module.decoder(
+            backbone_features_2 = torch.cat(
+                (new_latent_vectors[1], old_latent_vectors[1]), dim=0
+            ).to(device)
+            backbone_features_3 = torch.cat(
+                (new_latent_vectors[2], old_latent_vectors[2]), dim=0
+            ).to(device)
+            backbone_features_4 = torch.cat(
+                (new_latent_vectors[3], old_latent_vectors[3]), dim=0
+            ).to(device)
+
+            backbone_features = (
+                backbone_features_1,
+                backbone_features_2,
+                backbone_features_3,
+                backbone_features_4,
+            )
+
+            decoder_output = self.model.pixel_level_module.decoder(
                 backbone_features, output_hidden_states=output_hidden_states
             )
 
@@ -48,14 +67,14 @@ class CustomMask2Former(Mask2FormerForUniversalSegmentation):
             )
             decoder_last_hidden_state = (decoder_output.mask_features,)
             decoder_hidden_states = (decoder_output.multi_scale_features,)
+            print(len(decoder_hidden_states))
+            concat_pixel_mask = torch.cat((pixel_mask, old_pixel_mask), dim=0).to(
+                device
+            )
+            concat_mask_labels = mask_labels.extend(old_mask_labels)
+            concat_class_labels = class_labels.extend(old_class_labels)
 
-            concat_pixel_mask = torch.cat(
-                (batch["pixel_mask"], old_pixel_mask), dim=0
-            ).to(device)
-            concat_mask_labels = batch["mask_labels"].extend(old_mask_labels)
-            concat_class_labels = batch["class_labels"].extend(old_class_labels)
-
-            transformer_module_output = self.model.model.transformer_module(
+            transformer_module_output = self.model.transformer_module(
                 multi_scale_features=decoder_hidden_states,
                 mask_features=decoder_last_hidden_state,
                 output_hidden_states=True,
