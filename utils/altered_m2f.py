@@ -4,9 +4,7 @@ import torch
 from torch import Tensor
 from transformers.models.mask2former.modeling_mask2former import (
     Mask2FormerForUniversalSegmentation,
-    Mask2FormerForUniversalSegmentationOutput,
-    Mask2FormerModelOutput,
-)
+    Mask2FormerForUniversalSegmentationOutput, Mask2FormerModelOutput)
 
 
 class CustomMask2Former(Mask2FormerForUniversalSegmentation):
@@ -24,7 +22,8 @@ class CustomMask2Former(Mask2FormerForUniversalSegmentation):
     ):
         output_hidden_states = True
         output_attentions = True
-
+        output_auxiliary_logits=False
+        
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         if (
             (old_latent_vectors != None)
@@ -65,14 +64,14 @@ class CustomMask2Former(Mask2FormerForUniversalSegmentation):
             encoder_hidden_states = (
                 tuple(backbone_features) if output_hidden_states else None,
             )
-            decoder_last_hidden_state = (decoder_output.mask_features,)
-            decoder_hidden_states = (decoder_output.multi_scale_features,)
-            print(len(decoder_hidden_states))
+            decoder_last_hidden_state = decoder_output.mask_features
+            decoder_hidden_states = decoder_output.multi_scale_features
+         
             concat_pixel_mask = torch.cat((pixel_mask, old_pixel_mask), dim=0).to(
                 device
             )
-            concat_mask_labels = mask_labels.extend(old_mask_labels)
-            concat_class_labels = class_labels.extend(old_class_labels)
+            mask_labels.extend(old_mask_labels)
+            class_labels.extend(old_class_labels)
 
             transformer_module_output = self.model.transformer_module(
                 multi_scale_features=decoder_hidden_states,
@@ -119,12 +118,12 @@ class CustomMask2Former(Mask2FormerForUniversalSegmentation):
                 class_queries_logits, masks_queries_logits
             )
 
-            if concat_mask_labels is not None and concat_class_labels is not None:
+            if mask_labels is not None and class_labels is not None:
                 loss_dict = self.get_loss_dict(
                     masks_queries_logits=masks_queries_logits[-1],
                     class_queries_logits=class_queries_logits[-1],
-                    mask_labels=concat_mask_labels,
-                    class_labels=concat_class_labels,
+                    mask_labels=mask_labels,
+                    class_labels=class_labels,
                     auxiliary_predictions=auxiliary_logits,
                 )
                 loss = self.get_loss(loss_dict)
@@ -156,4 +155,4 @@ class CustomMask2Former(Mask2FormerForUniversalSegmentation):
                 pixel_values, mask_labels, class_labels, pixel_mask
             )
 
-            return output
+        return output
