@@ -8,6 +8,7 @@ from transformers import AutoImageProcessor
 
 # BG_VALUE_255 = 255  # 0
 BG_VALUE_0 = 0
+TARGET_SIZE=(270,480)
 CADIS_PIXEL_MEAN = [0.57365126, 0.34606295, 0.19539679]
 CADIS_PIXEL_STD = [0.15933991, 0.15584118, 0.10485045]
 CAT1K_PIXEL_MEAN = [0.31471649, 0.28790466, 0.21170973]
@@ -196,7 +197,31 @@ def m2f_extract_pred_maps_and_masks(
 
     return pred_maps, masks
 
+def get_pred_logits(class_queries_logits,masks_queries_logits):
+    # Remove the null class `[..., :-1]`
+    masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
+    masks_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
 
+    # Semantic segmentation logits of shape (batch_size, num_classes, height, width)
+    segmentation_pred = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
+    batch_size = class_queries_logits.shape[0]
+    
+    resized_logits=[]
+
+    for idx in range(batch_size):
+        resized_logits.append(torch.nn.functional.interpolate(
+            segmentation_pred[idx].unsqueeze(dim=0), size=TARGET_SIZE, mode="bilinear", align_corners=False
+        ))
+    resized_preds=torch.cat(resized_logits,dim=0)
+    return resized_preds
+
+def get_target_labels(class_labels,mask_labels,batch_size,num_classes):
+    target=torch.zeros((batch_size,num_classes,TARGET_SIZE[0],TARGET_SIZE[1]))
+    for b in range(batch_size):
+        for i,label in enumerate(class_labels[b]):
+            target[:,label,:,:]=mask_labels[b][i]
+    return target
+    
 def m2f_dataset_collate(examples):
     # Get the pixel values, pixel mask, mask labels, and class labels
     pixel_values = torch.stack(
