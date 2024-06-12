@@ -84,4 +84,16 @@ train_transforms_blur_no_distortion = transforms.Compose(
         transforms.RandomApply([GaussianBlur(kernel_size=5, sigma=(0.1, 5.0))], p=0.5),
     ]
 )
+train_transforms_color_jitter = transforms.Compose(
+    [
+        transforms.RandomApply(
+            [
+                transforms.ColorJitter(
+                    brightness=0.5, contrast=0.5, saturation=0.5, hue=0.1
+                )
+            ],
+            p=0.5,
+        )
+    ]
+)
 # ========================================================== #
