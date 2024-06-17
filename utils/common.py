@@ -198,7 +198,7 @@ def m2f_extract_pred_maps_and_masks(
     return pred_maps, masks
 
 
-def get_pred_logits(class_queries_logits, masks_queries_logits):
+def get_pred_logits(class_queries_logits, masks_queries_logits, resize=True):
     # Remove the null class `[..., :-1]`
     masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
     masks_probs = (
@@ -210,22 +210,36 @@ def get_pred_logits(class_queries_logits, masks_queries_logits):
     batch_size = class_queries_logits.shape[0]
 
     resized_logits = []
-
-    for idx in range(batch_size):
-        resized_logits.append(
-            torch.nn.functional.interpolate(
-                segmentation_pred[idx].unsqueeze(dim=0),
-                size=TARGET_SIZE,
-                mode="bilinear",
-                align_corners=False,
+    if resize:
+        for idx in range(batch_size):
+            resized_logits.append(
+                torch.nn.functional.interpolate(
+                    segmentation_pred[idx].unsqueeze(dim=0),
+                    size=TARGET_SIZE,
+                    mode="bilinear",
+                    align_corners=False,
+                )
             )
-        )
-    resized_preds = torch.cat(resized_logits, dim=0)
-    return resized_preds
+        resized_preds = torch.cat(resized_logits, dim=0)
+        return resized_preds
+    else:
+        return segmentation_pred
 
 
-def get_target_labels(class_labels, mask_labels, batch_size, num_classes):
-    target = torch.zeros((batch_size, num_classes, TARGET_SIZE[0], TARGET_SIZE[1]))
+def get_target_labels(
+    class_labels, mask_labels, batch_size, num_classes, size_0=None, size_1=None
+):
+    if size_0 is not None:
+        target_size_0 = size_0
+    else:
+        target_size_0 = TARGET_SIZE[0]
+
+    if size_1 is not None:
+        target_size_1 = size_1
+    else:
+        target_size_1 = TARGET_SIZE[1]
+
+    target = torch.zeros((batch_size, num_classes, target_size_0, target_size_1))
     for b in range(batch_size):
         for i, label in enumerate(class_labels[b]):
             target[b, label, :, :] = mask_labels[b][i]

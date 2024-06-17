@@ -1,10 +1,29 @@
 from typing import Dict, List, Optional, Tuple
 
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from common import get_pred_logits
 from torch import Tensor
 from transformers.models.mask2former.modeling_mask2former import (
+    Mask2FormerConfig,
     Mask2FormerForUniversalSegmentation,
-    Mask2FormerForUniversalSegmentationOutput, Mask2FormerModelOutput)
+    Mask2FormerForUniversalSegmentationOutput,
+    Mask2FormerModelOutput,
+)
+
+
+class M2FWithContrastiveLoss(Mask2FormerForUniversalSegmentation):
+    def __init__(self, config: Mask2FormerConfig):
+        super().__init__(config)
+        self.sup_con_head = nn.Linear(input_size, 128)
+
+    def forward(self, pixel_values: Tensor, **kwargs):
+        # Regular M2F output
+        outputs = super().forward(pixel_values, **kwargs)
+        x = get_pred_logits(outputs.class_queries_logits, outputs.masks_queries_logits)
+        pred_supcon = self.sup_con_head(x)
+        pred_supcon = F.normalize(pred_supcon, dim=1)
 
 
 class CustomMask2Former(Mask2FormerForUniversalSegmentation):
@@ -22,8 +41,8 @@ class CustomMask2Former(Mask2FormerForUniversalSegmentation):
     ):
         output_hidden_states = True
         output_attentions = True
-        output_auxiliary_logits=False
-        
+        output_auxiliary_logits = False
+
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         if (
             (old_latent_vectors != None)
@@ -66,7 +85,7 @@ class CustomMask2Former(Mask2FormerForUniversalSegmentation):
             )
             decoder_last_hidden_state = decoder_output.mask_features
             decoder_hidden_states = decoder_output.multi_scale_features
-         
+
             concat_pixel_mask = torch.cat((pixel_mask, old_pixel_mask), dim=0).to(
                 device
             )
