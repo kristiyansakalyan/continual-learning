@@ -252,10 +252,12 @@ class PixelContrastLoss(nn.Module, ABC):
 
         if prototype:
             anchor_feature = prototype
+            #TODO !!!
+            #anchor_count =?
         else:
             anchor_feature = contrast_feature
 
-        anchor_count = contrast_count
+            anchor_count = contrast_count
 
         anchor_dot_contrast = torch.div(
             torch.matmul(anchor_feature, torch.transpose(contrast_feature, 0, 1)),
