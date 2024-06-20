@@ -22,8 +22,8 @@ class PixelContrastLoss(nn.Module, ABC):
         self.ignore_label = -1
 
         self.max_samples = 1024  # from github
-        self.num_positive_samples = 1024  # custom
-        """self.num_B_positive_samples= self.num_positive_samples//2 #custom
+        """self.num_positive_samples = 1024  # custom
+        self.num_B_positive_samples= self.num_positive_samples//2 #custom
         self.num_A_positive_samples= self.num_positive_samples//2 #custom
         self.num_negative_samples=2048 #custom
         self.num_B_negative_samples=self.num_negative_samples//2 #custom
@@ -130,7 +130,8 @@ class PixelContrastLoss(nn.Module, ABC):
                         easy_indices_A = (
                             (this_y_hat_A == cls_id) & (this_y_A == cls_id)
                         ).nonzero()
-                        easy_pixels_A.append(X[i, easy_indices_A, :].squeeze(1))
+                        if len(easy_indices_A) > 0:
+                            easy_pixels_A.append(X[i, easy_indices_A, :].squeeze(1))
 
                     hard_indices_A = (
                         (this_y_hat_A == cls_id) & (this_y_A != cls_id)
@@ -171,7 +172,7 @@ class PixelContrastLoss(nn.Module, ABC):
                 easy_pixels_A_ = None
 
                 if len(hard_pixels_A) > 0:
-                    hard_pixels_A_ = torch.cat(hard_pixels_A, dim=0)
+                    hard_pixels_A_ = torch.cat(hard_pixels_A, dim=0).to(self.device)
                     if hard_pixels_A_.shape[0] < negative_A_keep:
                         negative_A_keep = hard_pixels_A_.shape[0]
                         negative_B_keep = num_hard_keep - negative_A_keep
@@ -183,7 +184,7 @@ class PixelContrastLoss(nn.Module, ABC):
                     negative_A_keep = 0
 
                 if len(easy_pixels_A) > 0:
-                    easy_pixels_A_ = torch.cat(easy_pixels_A, dim=0)
+                    easy_pixels_A_ = torch.cat(easy_pixels_A, dim=0).to(self.device)
                     if easy_pixels_A_.shape[0] < positive_A_keep:
                         positive_A_keep = easy_pixels_A_.shape[0]
                         positive_B_keep = num_easy_keep - positive_A_keep
@@ -199,7 +200,7 @@ class PixelContrastLoss(nn.Module, ABC):
                     positive_B_keep,
                     hard_elements=hard_indices_B,
                     easy_elements=easy_indices_B,
-                )
+                ).to(self.device)
                 pixels_B = X[ii, indices_B, :].squeeze(1)
 
                 if positive_A_keep + negative_A_keep > 0:
@@ -208,12 +209,11 @@ class PixelContrastLoss(nn.Module, ABC):
                         positive_A_keep,
                         hard_elements=hard_pixels_A_,
                         easy_elements=easy_pixels_A_,
-                    )
+                    ).to(self.device)
 
-                    pixels = torch.cat((pixels_B, pixels_A), dim=0)
+                    pixels = torch.cat((pixels_B, pixels_A), dim=0).to(self.device)
                 else:
                     pixels = pixels_B
-
                 X_[X_ptr, :, :] = pixels
                 y_[X_ptr] = cls_id
                 X_ptr += 1
@@ -248,7 +248,7 @@ class PixelContrastLoss(nn.Module, ABC):
         mask = torch.eq(labels_, torch.transpose(labels_, 0, 1)).float().to(self.device)
 
         contrast_count = n_view
-        contrast_feature = torch.cat(torch.unbind(feats_, dim=1), dim=0)
+        contrast_feature = torch.cat(torch.unbind(feats_, dim=1), dim=0).to(self.device)
 
         if prototype:
             anchor_feature = prototype
@@ -260,15 +260,21 @@ class PixelContrastLoss(nn.Module, ABC):
         anchor_dot_contrast = torch.div(
             torch.matmul(anchor_feature, torch.transpose(contrast_feature, 0, 1)),
             self.temperature,
-        )
+        ).to(self.device)
         logits_max, _ = torch.max(anchor_dot_contrast, dim=1, keepdim=True)
         logits = anchor_dot_contrast - logits_max.detach()
 
-        mask = mask.repeat(anchor_count, contrast_count)
+        mask = mask.repeat(anchor_count, contrast_count).to(self.device)
         neg_mask = 1 - mask
 
-        logits_mask = torch.ones_like(mask).scatter_(
-            1, torch.arange(anchor_num * anchor_count).view(-1, 1).to(self.device), 0
+        logits_mask = (
+            torch.ones_like(mask)
+            .scatter_(
+                1,
+                torch.arange(anchor_num * anchor_count).view(-1, 1).to(self.device),
+                0,
+            )
+            .to(self.device)
         )
         mask = mask * logits_mask
 
@@ -334,7 +340,6 @@ def get_random_elements(
     if hard_elements is not None and easy_elements is not None:
         num_hard = hard_elements.shape[0]
         num_easy = easy_elements.shape[0]
-
         perm = torch.randperm(num_hard)
         hard_elements = hard_elements[perm[:num_hard_keep]]
         perm = torch.randperm(num_easy)
