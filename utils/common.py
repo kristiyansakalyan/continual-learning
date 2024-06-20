@@ -198,6 +198,42 @@ def m2f_extract_pred_maps_and_masks(
     return pred_maps, masks
 
 
+def get_perpixel_features(pixel_decoder_hidden_states, pixel_decoder_last_hidden_state):
+    """Upsample all pixel decoder features to the target (image) size and then
+        take the average of them, return the average matrix
+
+    Parameters
+    ----------
+    pixel_decoder_hidden_states : Tuple[torch.FloatTensor]
+        Intermediate pixel decoder features of size [batch_size, num_channels, height, width].
+        Each feature has different height and width but the num_channels=256
+    pixel_decoder_last_hidden_state : torch.FloatTensor
+        Last pixel decoder hidden state of size [batch_size, num_channels, height, width]
+
+    Returns
+    -------
+    torch.FloatTensor
+        Upsampled per-pixel feature matrix that is the average of all the feature matrices from the pixel decoder
+    """
+    upsampled_last_feature = torch.nn.functional.interpolate(
+        pixel_decoder_last_hidden_state,
+        size=TARGET_SIZE,
+        mode="bilinear",
+        align_corners=False,
+    )
+    features = upsampled_last_feature
+    for feat in pixel_decoder_hidden_states:
+        features = torch.add(
+            features,
+            torch.nn.functional.interpolate(
+                feat, size=TARGET_SIZE, mode="bilinear", align_corners=False
+            ),
+        )
+
+    features /= len(pixel_decoder_hidden_states) + 1
+    return features
+
+
 def get_pred_logits(class_queries_logits, masks_queries_logits, resize=True):
     # Remove the null class `[..., :-1]`
     masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
