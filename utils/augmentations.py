@@ -38,64 +38,6 @@ class RandomChannelRearrangement(torch.nn.Module):
         random.shuffle(channels)  # Shuffle channels
         img = torch.cat(channels, dim=0)  # Concatenate shuffled channels
         return img
-    
-class ColorAugSSDTransform(torch.nn.Module):
-    def __init__(
-        self,
-        brightness_delta=32,
-        contrast_low=0.5,
-        contrast_high=1.5,
-        saturation_low=0.5,
-        saturation_high=1.5,
-        hue_delta=0.1,  # hue_delta is normalized to [0, 0.5] in torchvision
-    ):
-        super().__init__()
-        self.brightness_delta = brightness_delta
-        self.contrast_low = contrast_low
-        self.contrast_high = contrast_high
-        self.saturation_low = saturation_low
-        self.saturation_high = saturation_high
-        self.hue_delta = hue_delta
-
-    def forward(self, img):
-        if not isinstance(img, torch.Tensor):
-            img = TF.to_tensor(img)
-
-        img = self.brightness(img)
-        
-        if random.random() > 0.5:
-            img = self.contrast(img)
-            img = self.saturation(img)
-            img = self.hue(img)
-        else:
-            img = self.saturation(img)
-            img = self.hue(img)
-            img = self.contrast(img)
-        return img
-
-    def brightness(self, img):
-        if random.random() > 0.5:
-            delta = random.uniform(-self.brightness_delta, self.brightness_delta)
-            return TF.adjust_brightness(img, 1 + delta / 255)
-        return img
-
-    def contrast(self, img):
-        if random.random() > 0.5:
-            factor = random.uniform(self.contrast_low, self.contrast_high)
-            return TF.adjust_contrast(img, factor)
-        return img
-
-    def saturation(self, img):
-        if random.random() > 0.5:
-            factor = random.uniform(self.saturation_low, self.saturation_high)
-            return TF.adjust_saturation(img, factor)
-        return img
-
-    def hue(self, img):
-        if random.random() > 0.5:
-            delta = random.uniform(-self.hue_delta, self.hue_delta)
-            return TF.adjust_hue(img, delta)
-        return img
 
 
 # ================== Common Augmentations ================== #
@@ -152,11 +94,6 @@ train_transforms_color_jitter = transforms.Compose(
             ],
             p=0.5,
         )
-    ]
-)
-train_transforms_ColorAugSSD = transforms.Compose(
-    [
-        ColorAugSSDTransform()
     ]
 )
 # ========================================================== #
