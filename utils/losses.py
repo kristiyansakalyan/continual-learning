@@ -12,13 +12,17 @@ import torch.nn.functional as F
 
 class PixelContrastLoss(nn.Module, ABC):
     def __init__(
-        self, num_classes=None, num_prototypes_per_class=None, in_channels=None
+        self,
+        full_batch_sampling=False,
+        num_classes=None,
+        num_prototypes_per_class=None,
+        in_channels=None,
     ):
         super(PixelContrastLoss, self).__init__()
 
         self.temperature = 0.1  # This might also be 0.07 (github), 0.1 in the paper
         self.base_temperature = 0.07  # from github
-
+        self.full_batch_sampling = full_batch_sampling
         self.ignore_label = -1
 
         self.max_samples = 1024  # from github
@@ -74,7 +78,12 @@ class PixelContrastLoss(nn.Module, ABC):
         # X_B=X[:X.size(0)//2,...] # cataract images
         # X_A=X[X.size(0)//2:,...] # cadis images
 
-        batch_size, feat_dim = X.shape[0] // 2, X.shape[-1]
+        if (
+            self.full_batch_sampling
+        ):  # For each image, pixels from all the other images in the given batch will be sampled too (used in A training)
+            batch_size, feat_dim = X.shape[0], X.shape[-1]
+        else:  # For each image in the first half of the batch, pixels from the second half of the batch will be sampled too (used in B training)
+            batch_size, feat_dim = X.shape[0] // 2, X.shape[-1]
 
         classes = []
         total_classes = 0
@@ -120,24 +129,47 @@ class PixelContrastLoss(nn.Module, ABC):
                 hard_pixels_A = []  # all negative A pixels will be stored
                 easy_pixels_A = []  # all positive A pixels will be stored
 
-                # Traverse replayed "A" images, the second half of the batch
-                for i in range(batch_size, batch_size * 2):
-                    this_y_A = y[i]  # groundtruth
+                if self.full_batch_sampling:
+                    # Traverse the rest of the batch, any other image except the current one
+                    for i in range(batch_size):
+                        if i == ii:
+                            continue
+                        this_y_A = y[i]  # groundtruth
 
-                    if cls_id in torch.unique(this_y_A):
-                        this_y_hat_A = y_hat[i]  # prediction
+                        if cls_id in torch.unique(this_y_A):
+                            this_y_hat_A = y_hat[i]  # prediction
 
-                        easy_indices_A = (
-                            (this_y_hat_A == cls_id) & (this_y_A == cls_id)
+                            easy_indices_A = (
+                                (this_y_hat_A == cls_id) & (this_y_A == cls_id)
+                            ).nonzero()
+                            if len(easy_indices_A) > 0:
+                                easy_pixels_A.append(X[i, easy_indices_A, :].squeeze(1))
+
+                        hard_indices_A = (
+                            (this_y_hat_A == cls_id) & (this_y_A != cls_id)
                         ).nonzero()
-                        if len(easy_indices_A) > 0:
-                            easy_pixels_A.append(X[i, easy_indices_A, :].squeeze(1))
+                        if len(hard_indices_A) > 0:
+                            hard_pixels_A.append(X[i, hard_indices_A, :].squeeze(1))
 
-                    hard_indices_A = (
-                        (this_y_hat_A == cls_id) & (this_y_A != cls_id)
-                    ).nonzero()
-                    if len(hard_indices_A) > 0:
-                        hard_pixels_A.append(X[i, hard_indices_A, :].squeeze(1))
+                else:
+                    # Traverse replayed "A" images, the second half of the batch
+                    for i in range(batch_size, batch_size * 2):
+                        this_y_A = y[i]  # groundtruth
+
+                        if cls_id in torch.unique(this_y_A):
+                            this_y_hat_A = y_hat[i]  # prediction
+
+                            easy_indices_A = (
+                                (this_y_hat_A == cls_id) & (this_y_A == cls_id)
+                            ).nonzero()
+                            if len(easy_indices_A) > 0:
+                                easy_pixels_A.append(X[i, easy_indices_A, :].squeeze(1))
+
+                        hard_indices_A = (
+                            (this_y_hat_A == cls_id) & (this_y_A != cls_id)
+                        ).nonzero()
+                        if len(hard_indices_A) > 0:
+                            hard_pixels_A.append(X[i, hard_indices_A, :].squeeze(1))
 
                 num_hard = (
                     len(hard_pixels_A) + hard_indices_B.shape[0]
@@ -252,8 +284,8 @@ class PixelContrastLoss(nn.Module, ABC):
 
         if prototype:
             anchor_feature = prototype
-            #TODO !!!
-            #anchor_count =?
+            # TODO !!!
+            # anchor_count =?
         else:
             anchor_feature = contrast_feature
 
@@ -313,7 +345,6 @@ class PixelContrastLoss(nn.Module, ABC):
         feats = feats_normalized.permute(0, 2, 3, 1)
 
         feats = feats.contiguous().view(feats.shape[0], -1, feats.shape[-1])
-
         feats_, labels_ = self._hard_anchor_sampling(feats, labels, predict)
 
         loss = self._contrastive(feats_, labels_)
