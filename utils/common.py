@@ -230,22 +230,29 @@ def m2f_extract_pred_maps_and_masks(
     return pred_maps, masks
 
 
-def get_perpixel_features(pixel_decoder_hidden_states, pixel_decoder_last_hidden_state):
+def get_perpixel_features(
+    pixel_decoder_hidden_states, pixel_decoder_last_hidden_state, avg=True
+):
     """Upsample all pixel decoder features to the target (image) size and then
         take the average of them, return the average matrix
 
     Parameters
     ----------
     pixel_decoder_hidden_states : Tuple[torch.FloatTensor]
-        Intermediate pixel decoder features of size [batch_size, num_channels, height, width].
-        Each feature has different height and width but the num_channels=256
+        Intermediate pixel decoder features of size [batch_size, feat_dim, height, width].
+        Each feature has different height and width but the feat_dim=256
     pixel_decoder_last_hidden_state : torch.FloatTensor
-        Last pixel decoder hidden state of size [batch_size, num_channels, height, width]
+        Last pixel decoder hidden state of size [batch_size, feat_dim, height, width]
+    avg : Bool
+        Default True. The per-pixel average of 4 pixel decoder matrices is returned. If it is set False,
+        then a tensor of size [batch_size, feat_dim*4, height, width] is returned.
 
     Returns
     -------
     torch.FloatTensor
-        Upsampled per-pixel feature matrix that is the average of all the feature matrices from the pixel decoder
+        Either the average of all the feature matrices from the pixel decoder is
+        returned ([batch_size, feat_dim, height, width]) or a tensor
+        which is the stack of 4 feature matrices is returned ([batch_size, feat_dim*4, height, width]).
     """
     upsampled_last_feature = torch.nn.functional.interpolate(
         pixel_decoder_last_hidden_state,
@@ -253,16 +260,26 @@ def get_perpixel_features(pixel_decoder_hidden_states, pixel_decoder_last_hidden
         mode="bilinear",
         align_corners=False,
     )
-    features = upsampled_last_feature
-    for feat in pixel_decoder_hidden_states:
-        features = torch.add(
-            features,
-            torch.nn.functional.interpolate(
-                feat, size=TARGET_SIZE, mode="bilinear", align_corners=False
-            ),
-        )
+    if avg:
+        features = upsampled_last_feature
+        for feat in pixel_decoder_hidden_states:
+            features = torch.add(
+                features,
+                torch.nn.functional.interpolate(
+                    feat, size=TARGET_SIZE, mode="bilinear", align_corners=False
+                ),
+            )
 
-    features /= len(pixel_decoder_hidden_states) + 1
+        features /= len(pixel_decoder_hidden_states) + 1
+    else:
+        features = [upsampled_last_feature]
+        for feat in pixel_decoder_hidden_states:
+            features.append(
+                torch.nn.functional.interpolate(
+                    feat, size=TARGET_SIZE, mode="bilinear", align_corners=False
+                )
+            )
+        features = torch.cat(features, dim=1).to(upsampled_last_feature.device)
     return features
 
 

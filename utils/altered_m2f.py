@@ -3,7 +3,6 @@ from typing import Dict, List, Optional, Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from common import get_pred_logits
 from torch import Tensor
 from transformers.models.mask2former.modeling_mask2former import (
     Mask2FormerConfig,
@@ -12,18 +11,40 @@ from transformers.models.mask2former.modeling_mask2former import (
     Mask2FormerModelOutput,
 )
 
+from utils.common import get_perpixel_features
+
 
 class M2FWithContrastiveLoss(Mask2FormerForUniversalSegmentation):
     def __init__(self, config: Mask2FormerConfig):
         super().__init__(config)
-        self.sup_con_head = nn.Linear(input_size, 128)
+
+        self.dim_in = 1024
+        self.proj_dim = 256
+
+        self.sup_con_head = nn.Sequential(
+            nn.Conv2d(self.dim_in, self.dim_in, kernel_size=1),
+            # nn.SyncBatchNorm(self.dim_in), # TODO: Should we activate normalization?
+            nn.ReLU(),
+            nn.Conv2d(self.dim_in, self.proj_dim, kernel_size=1),
+        )
 
     def forward(self, pixel_values: Tensor, **kwargs):
         # Regular M2F output
         outputs = super().forward(pixel_values, **kwargs)
-        x = get_pred_logits(outputs.class_queries_logits, outputs.masks_queries_logits)
-        pred_supcon = self.sup_con_head(x)
-        pred_supcon = F.normalize(pred_supcon, dim=1)
+
+        if kwargs["output_hidden_states"]:
+            # get pixel decoder features
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            feats = get_perpixel_features(
+                outputs.pixel_decoder_hidden_states,
+                outputs.pixel_decoder_last_hidden_state,
+                avg=False,
+            ).to(device)
+            pred_supcon = self.sup_con_head(feats)
+
+            return outputs, pred_supcon
+        else:
+            return outputs
 
 
 class CustomMask2Former(Mask2FormerForUniversalSegmentation):

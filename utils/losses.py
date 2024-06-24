@@ -134,9 +134,9 @@ class PixelContrastLoss(nn.Module, ABC):
                         if i == ii:
                             continue
                         this_y_A = y[i]  # groundtruth
+                        this_y_hat_A = y_hat[i]  # prediction
 
                         if cls_id in torch.unique(this_y_A):
-                            this_y_hat_A = y_hat[i]  # prediction
 
                             easy_indices_A = (
                                 (this_y_hat_A == cls_id) & (this_y_A == cls_id)
@@ -154,9 +154,9 @@ class PixelContrastLoss(nn.Module, ABC):
                     # Traverse replayed "A" images, the second half of the batch
                     for i in range(batch_size, batch_size * 2):
                         this_y_A = y[i]  # groundtruth
+                        this_y_hat_A = y_hat[i]  # prediction
 
                         if cls_id in torch.unique(this_y_A):
-                            this_y_hat_A = y_hat[i]  # prediction
 
                             easy_indices_A = (
                                 (this_y_hat_A == cls_id) & (this_y_A == cls_id)
