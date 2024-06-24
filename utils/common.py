@@ -15,6 +15,20 @@ CAT1K_PIXEL_MEAN = [0.31471649, 0.28790466, 0.21170973]
 CAT1K_PIXEL_STD = [0.30111405, 0.25568646, 0.22290612]
 FULL_MERGE_PIXEL_MEAN = None
 FULL_MERGE_PIXEL_STD = None
+WEIGHTS_CADIS_TRAIN = [
+    0.02725455,
+    0.09069091,
+    0.09068182,
+    0.09065455,
+    0.09082727,
+    0.09083636,
+    0.09075455,
+    0.09073636,
+    0.09062727,
+    0.09062727,
+    0.07541818,
+    0.08089091,
+]
 
 
 def set_seed(seed: int) -> None:
@@ -50,6 +64,24 @@ def pixel_mean_std(dataset):
     pixel_std = np.sqrt((sum_squares_channels / count_pixels) - pixel_mean**2)
 
     return pixel_mean, pixel_std
+
+
+def get_dataset_weights(dataset, num_classes):
+    total_pixels = 0
+    class_pixels = np.zeros(num_classes, dtype=np.int64)
+    for i in range(len(dataset)):
+        _, mask = dataset[i]
+        mask = mask.numpy()
+        for cls_ in range(num_classes):
+            class_pixels[cls_] += np.sum(mask == cls_)
+
+    total_pixels = class_pixels.sum()
+    class_distribution = class_pixels / total_pixels
+    l = np.zeros(num_classes)
+    for i in range(len(class_distribution)):
+        l[i] += round(1 - class_distribution[i], 4)
+    weights = l / l.sum()
+    return weights
 
 
 class Mask2FormerBatch(NamedTuple):

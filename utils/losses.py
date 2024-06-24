@@ -4,6 +4,7 @@ The prototype part is taken from: https://github.com/Simael/DSP/tree/main
 """
 
 from abc import ABC
+from typing import Dict, Literal, NamedTuple, TypeAlias
 
 import torch
 import torch.nn as nn
@@ -14,6 +15,7 @@ class PixelContrastLoss(nn.Module, ABC):
     def __init__(
         self,
         full_batch_sampling=False,
+        weights=None,
         num_classes=None,
         num_prototypes_per_class=None,
         in_channels=None,
@@ -23,16 +25,13 @@ class PixelContrastLoss(nn.Module, ABC):
         self.temperature = 0.1  # This might also be 0.07 (github), 0.1 in the paper
         self.base_temperature = 0.07  # from github
         self.full_batch_sampling = full_batch_sampling
-        self.ignore_label = -1
+        self.ignore_label = -1  # from github
 
         self.max_samples = 1024  # from github
-        """self.num_positive_samples = 1024  # custom
-        self.num_B_positive_samples= self.num_positive_samples//2 #custom
-        self.num_A_positive_samples= self.num_positive_samples//2 #custom
-        self.num_negative_samples=2048 #custom
-        self.num_B_negative_samples=self.num_negative_samples//2 #custom
-        self.num_A_negative_samples=self.num_negative_samples//2 #custom"""
         self.max_views = 100  # 50 in the paper, 100 in github
+        self.weights = (
+            weights  # dictionary of class weights to be used in the contrastive loss
+        )
         self.prototypes = None
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         if (
@@ -275,7 +274,6 @@ class PixelContrastLoss(nn.Module, ABC):
         """
 
         anchor_num, n_view = feats_.shape[0], feats_.shape[1]
-
         labels_ = labels_.contiguous().view(-1, 1)
         mask = torch.eq(labels_, torch.transpose(labels_, 0, 1)).float().to(self.device)
 
@@ -311,7 +309,6 @@ class PixelContrastLoss(nn.Module, ABC):
             .to(self.device)
         )
         mask = mask * logits_mask
-
         neg_logits = torch.exp(logits) * neg_mask
         neg_logits = neg_logits.sum(1, keepdim=True)
 
@@ -320,6 +317,16 @@ class PixelContrastLoss(nn.Module, ABC):
         log_prob = logits - torch.log(exp_logits + neg_logits)
 
         mean_log_prob_pos = (mask * log_prob).sum(1) / mask.sum(1)
+
+        if self.weights is not None:
+            weight_tensor = torch.ones(labels_.size()).to(self.device)
+
+            for idx, lbl in enumerate(labels_):
+                weight_tensor[idx] = self.weights[int(lbl)]
+
+            weight_tensor = weight_tensor.repeat(contrast_count, 1).reshape(-1)
+
+            mean_log_prob_pos *= weight_tensor
 
         loss = -(self.temperature / self.base_temperature) * mean_log_prob_pos
         loss = loss.mean()
