@@ -23,7 +23,7 @@ class M2FWithContrastiveLoss(Mask2FormerForUniversalSegmentation):
 
         self.sup_con_head = nn.Sequential(
             nn.Conv2d(self.dim_in, self.dim_in, kernel_size=1),
-            # nn.SyncBatchNorm(self.dim_in), # TODO: Should we activate normalization?
+            nn.SyncBatchNorm(self.dim_in), # TODO: Should we deactivate normalization?
             nn.ReLU(),
             nn.Conv2d(self.dim_in, self.proj_dim, kernel_size=1),
         )
