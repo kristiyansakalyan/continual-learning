@@ -127,7 +127,9 @@ class PixelContrastLoss(nn.Module, ABC):
                 ).nonzero()  # positive samples
                 hard_pixels_A = []  # all negative A pixels will be stored
                 easy_pixels_A = []  # all positive A pixels will be stored
-
+                num_hard_pixels_A=0
+                num_easy_pixels_A=0
+                
                 if self.full_batch_sampling:
                     # Traverse the rest of the batch, any other image except the current one
                     for i in range(batch_size):
@@ -142,12 +144,14 @@ class PixelContrastLoss(nn.Module, ABC):
                                 (this_y_hat_A == cls_id) & (this_y_A == cls_id)
                             ).nonzero()
                             if len(easy_indices_A) > 0:
+                                num_easy_pixels_A+=easy_indices_A.shape[0]
                                 easy_pixels_A.append(X[i, easy_indices_A, :].squeeze(1))
 
                         hard_indices_A = (
                             (this_y_hat_A == cls_id) & (this_y_A != cls_id)
                         ).nonzero()
                         if len(hard_indices_A) > 0:
+                            num_hard_pixels_A+=hard_indices_A.shape[0]
                             hard_pixels_A.append(X[i, hard_indices_A, :].squeeze(1))
 
                 else:
@@ -162,19 +166,21 @@ class PixelContrastLoss(nn.Module, ABC):
                                 (this_y_hat_A == cls_id) & (this_y_A == cls_id)
                             ).nonzero()
                             if len(easy_indices_A) > 0:
+                                num_easy_pixels_A+=easy_indices_A.shape[0]
                                 easy_pixels_A.append(X[i, easy_indices_A, :].squeeze(1))
 
                         hard_indices_A = (
                             (this_y_hat_A == cls_id) & (this_y_A != cls_id)
                         ).nonzero()
                         if len(hard_indices_A) > 0:
+                            num_hard_pixels_A+=hard_indices_A.shape[0]
                             hard_pixels_A.append(X[i, hard_indices_A, :].squeeze(1))
 
                 num_hard = (
-                    len(hard_pixels_A) + hard_indices_B.shape[0]
+                    num_hard_pixels_A + hard_indices_B.shape[0]
                 )  # total number of negative pixels
                 num_easy = (
-                    len(easy_pixels_A) + easy_indices_B.shape[0]
+                    num_easy_pixels_A + easy_indices_B.shape[0]
                 )  # total number of positive pixels
 
                 if num_hard >= n_view / 2 and num_easy >= n_view / 2:
@@ -193,7 +199,6 @@ class PixelContrastLoss(nn.Module, ABC):
                         )
                     )
                     raise Exception
-
                 negative_B_keep = num_hard_keep // 2
                 positive_B_keep = num_easy_keep // 2
                 negative_A_keep = num_hard_keep - negative_B_keep
@@ -202,7 +207,7 @@ class PixelContrastLoss(nn.Module, ABC):
                 hard_pixels_A_ = None
                 easy_pixels_A_ = None
 
-                if len(hard_pixels_A) > 0:
+                if num_hard_pixels_A > 0:
                     hard_pixels_A_ = torch.cat(hard_pixels_A, dim=0).to(self.device)
                     if hard_pixels_A_.shape[0] < negative_A_keep:
                         negative_A_keep = hard_pixels_A_.shape[0]
@@ -214,7 +219,7 @@ class PixelContrastLoss(nn.Module, ABC):
                     negative_B_keep = num_hard_keep
                     negative_A_keep = 0
 
-                if len(easy_pixels_A) > 0:
+                if num_easy_pixels_A> 0:
                     easy_pixels_A_ = torch.cat(easy_pixels_A, dim=0).to(self.device)
                     if easy_pixels_A_.shape[0] < positive_A_keep:
                         positive_A_keep = easy_pixels_A_.shape[0]
@@ -241,7 +246,6 @@ class PixelContrastLoss(nn.Module, ABC):
                         hard_elements=hard_pixels_A_,
                         easy_elements=easy_pixels_A_,
                     ).to(self.device)
-
                     pixels = torch.cat((pixels_B, pixels_A), dim=0).to(self.device)
                 else:
                     pixels = pixels_B
