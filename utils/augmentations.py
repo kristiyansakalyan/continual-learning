@@ -159,4 +159,10 @@ train_transforms_ColorAugSSD = transforms.Compose(
         ColorAugSSDTransform()
     ]
 )
+
+train_transforms_ColorAugSSD_random = transforms.Compose(
+    [
+        transforms.RandomApply([ColorAugSSDTransform()], p=0.5)
+    ]
+)
 # ========================================================== #
