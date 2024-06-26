@@ -4,7 +4,6 @@ The prototype part is taken from: https://github.com/Simael/DSP/tree/main
 """
 
 from abc import ABC
-from typing import Dict, Literal, NamedTuple, TypeAlias
 
 import torch
 import torch.nn as nn
@@ -50,7 +49,7 @@ class PixelContrastLoss(nn.Module, ABC):
                 self.prototypes.div(norm), requires_grad=True
             )
 
-    def _hard_anchor_sampling(self, X, y_hat, y):
+    def _hard_anchor_sampling(self, X, y_hat, y, probs=None):
         """
         Sample positive and negative pixels for each class. Positive pixels will be easy samples (prediciton==gt)
         and the negative pixels will be hard samples (prediction!=gt)
@@ -64,6 +63,8 @@ class PixelContrastLoss(nn.Module, ABC):
             Predicted semantic labels of size [batch_size, H*W]
         y : torch.Tensor
             Predicted semantic labels of size [batch_size, H*W]
+        probs: torch.Tensor
+            Predicted class probabilities for each pixel [batch_size, H*W, classes]
 
         Returns
         -------
@@ -226,15 +227,35 @@ class PixelContrastLoss(nn.Module, ABC):
                     positive_B_keep = num_easy_keep
                     positive_A_keep = 0
 
+                # If probabitilites are provided, get the prob. score assigned to the correct
+                # class from the model and pass them to the sampling function.
+                if probs is not None:
+                    # Get the probabilities for the i-th batch sample
+                    this_probs = probs[ii]
+                    # Get the probabilities assigned to the correct class, which is actually
+                    # not the class the model predicted.
+                    correct_class_probs = this_probs[:, cls_id]
+                    hard_probs = correct_class_probs[hard_indices_B]
+
                 indices_B = get_random_elements(
                     negative_B_keep,
                     positive_B_keep,
                     hard_elements=hard_indices_B,
                     easy_elements=easy_indices_B,
+                    hard_probs=hard_probs if probs is not None else None,
                 ).to(self.device)
                 pixels_B = X[ii, indices_B, :].squeeze(1)
 
                 if positive_A_keep + negative_A_keep > 0:
+
+                    # TODO: No hard indicies for A :(
+                    # If probabitilites are provided, get the prob. score assigned to the correct
+                    # class from the model and pass them to the sampling function.
+                    # if probs is not None:
+                    #     this_probs = probs[ii]
+                    #     correct_class_probs = this_probs[:, cls_id]
+                    #     hard_probs = correct_class_probs[hard_indices_B]
+
                     pixels_A = get_random_elements(
                         negative_A_keep,
                         positive_A_keep,
@@ -359,7 +380,11 @@ class PixelContrastLoss(nn.Module, ABC):
 
 
 def get_random_elements(
-    num_hard_keep, num_easy_keep, hard_elements=None, easy_elements=None
+    num_hard_keep,
+    num_easy_keep,
+    hard_elements=None,
+    easy_elements=None,
+    hard_probs=None,
 ):
     """
     Randomly sample hard (negative) and easy (positive) elements for the given image
@@ -371,17 +396,31 @@ def get_random_elements(
         Either hard pixels or hard pixel indices to randomly sample from.
     easy_elements : torch.Tensor
         Either easy pixels or easy pixel indices to randomly sample from.
+    hard_probs : torch.Tensor
+        Hard probabilities associated with the hard elements.
 
     Returns
     -------
     torch.Tensor
         Returns the sampled and concatenated hard and easy elements
     """
+    print(hard_probs)
     if hard_elements is not None and easy_elements is not None:
         num_hard = hard_elements.shape[0]
         num_easy = easy_elements.shape[0]
-        perm = torch.randperm(num_hard)
-        hard_elements = hard_elements[perm[:num_hard_keep]]
+
+        if hard_probs is not None:
+            # Normalize probabilities to sum to 1
+            hard_probs /= hard_probs.sum()
+            # Sample indices based on probabilities
+            hard_indices = torch.multinomial(
+                hard_probs, num_hard_keep, replacement=False
+            )
+            hard_elements = hard_elements[hard_indices]
+        else:
+            perm = torch.randperm(num_hard)
+            hard_elements = hard_elements[perm[:num_hard_keep]]
+
         perm = torch.randperm(num_easy)
         easy_elements = easy_elements[perm[:num_easy_keep]]
 
@@ -389,8 +428,17 @@ def get_random_elements(
 
     elif hard_elements is not None:
         num_hard = hard_elements.shape[0]
-        perm = torch.randperm(num_hard)
-        elements = hard_elements[perm[:num_hard_keep]]
+        if hard_probs is not None:
+            # Normalize probabilities to sum to 1
+            hard_probs /= hard_probs.sum()
+            # Sample indices based on probabilities
+            hard_indices = torch.multinomial(
+                hard_probs, num_hard_keep, replacement=False
+            )
+            hard_elements = hard_elements[hard_indices]
+        else:
+            perm = torch.randperm(num_hard)
+            hard_elements = hard_elements[perm[:num_hard_keep]]
 
     elif easy_elements is not None:
         num_easy = easy_elements.shape[0]
@@ -398,3 +446,29 @@ def get_random_elements(
         elements = easy_elements[perm[:num_easy_keep]]
 
     return elements
+
+
+"""Sampling:
+
+import torch
+
+# Example tensors
+X = torch.tensor([10, 20, 30, 40, 50], dtype=torch.float32)
+p_X = torch.tensor([0.9, 0.9, 0.3, 0.1, 0.3], dtype=torch.float32)  # probabilities summing to 1
+
+# Ensure that p(X) sums to 1
+p_X /= p_X.sum()
+
+# Number of samples to draw
+num_samples = 3
+
+# Use torch.multinomial to sample indices
+sampled_indices = torch.multinomial(p_X, num_samples, replacement=False)
+
+# Use the sampled indices to get values from X
+sampled_X = X[sampled_indices]
+
+print("Sampled indices:", sampled_indices)
+print("Sampled values:", sampled_X)
+
+"""
