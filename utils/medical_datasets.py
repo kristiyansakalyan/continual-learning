@@ -791,15 +791,15 @@ class Mask2FormerDataset(Dataset):
 
     def __getitem__(self, idx):
         img, mask = self.dataset[idx]
-
+        
+        if self.transform is not None:
+            img=self.transform(img)
+            
         batch = self.processor(
             images=[img],
             segmentation_maps=[mask],
             return_tensors="pt",
             do_rescale=False,
         )
-
-        if self.transform is not None:
-            batch["pixel_values"] = self.transform(batch["pixel_values"])
 
         return batch
