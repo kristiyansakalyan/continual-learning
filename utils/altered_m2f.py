@@ -23,16 +23,18 @@ class M2FWithContrastiveLoss(Mask2FormerForUniversalSegmentation):
 
         self.sup_con_head = nn.Sequential(
             nn.Conv2d(self.dim_in, self.dim_in, kernel_size=1),
-            nn.SyncBatchNorm(self.dim_in), # TODO: Should we deactivate normalization?
+            nn.SyncBatchNorm(self.dim_in),  # TODO: Should we deactivate normalization?
             nn.ReLU(),
             nn.Conv2d(self.dim_in, self.proj_dim, kernel_size=1),
         )
 
-    def forward(self, pixel_values: Tensor, **kwargs):
+    def forward(self, pixel_values: Tensor, output_hidden_states=None, **kwargs):
         # Regular M2F output
-        outputs = super().forward(pixel_values, **kwargs)
+        outputs = super().forward(
+            pixel_values, output_hidden_states=output_hidden_states, **kwargs
+        )
 
-        if kwargs["output_hidden_states"]:
+        if output_hidden_states is not None and output_hidden_states == True:
             # get pixel decoder features
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             feats = get_perpixel_features(
