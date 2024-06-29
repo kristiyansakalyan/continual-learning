@@ -255,7 +255,7 @@ class PixelContrastLoss(nn.Module, ABC):
 
         return X_, y_
 
-    def _contrastive(self, feats_, labels_, prototype=None):
+    def _contrastive(self, feats_, labels_):
         """
         Contrastive loss. Taken directly from https://github.com/tfzhou/ContrastiveSeg
 
@@ -279,40 +279,80 @@ class PixelContrastLoss(nn.Module, ABC):
 
         anchor_num, n_view = feats_.shape[0], feats_.shape[1]
         labels_ = labels_.contiguous().view(-1, 1)
-        mask = torch.eq(labels_, torch.transpose(labels_, 0, 1)).float().to(self.device)
 
         contrast_count = n_view
         contrast_feature = torch.cat(torch.unbind(feats_, dim=1), dim=0).to(self.device)
 
-        if prototype:
-            anchor_feature = prototype
-            # TODO !!!
-            # anchor_count =?
+        if self.prototypes is not None:
+            prototype_norm = (
+                self.prototypes.pow(2).sum(2, keepdim=True).pow(1.0 / 2.0)
+            )  # normalize prototypes
+            anchor_feature = self.prototypes.div(prototype_norm).reshape(
+                self.prototypes.shape[2], -1
+            )  # size: (in_channels, num_classes * num_prototypes_per_class)
+            anchor_count = self.prototypes.size(0)  # anchor_count==num_classes
+            anchor_dot_contrast = torch.div(
+                torch.matmul(contrast_feature, anchor_feature),
+                self.temperature,
+            ).to(
+                self.device
+            )  # size: [n_view * total_classes , num_classes * num_prototypes_per_class]
+
+            # Average the similarities for prototypes representing the same class
+            anchor_dot_contrast = torch.nn.functional.avg_pool1d(
+                anchor_dot_contrast,
+                kernel_size=self.prototypes.shape[1],
+                stride=self.prototypes.shape[1],
+            ).t()  # size: [num_classes,n_view * total_classes]
+            mask = torch.zeros((anchor_count, labels_.size(0))).to(
+                self.device
+            )  # size: [num_classes, total_classes]
+            for i in range(mask.size(0)):
+                for j, lbl in enumerate(labels_):
+                    mask[i, j] = i == int(lbl)
+            mask = mask.repeat(1, contrast_count).to(
+                self.device
+            )  # size: [num_classes , n_view * total_classes]
+
+            neg_mask = 1 - mask
+
         else:
+            mask = (
+                torch.eq(labels_, torch.transpose(labels_, 0, 1))
+                .float()
+                .to(self.device)
+            )  # size: [total_classes, total_classes]
             anchor_feature = contrast_feature
 
             anchor_count = contrast_count
 
-        anchor_dot_contrast = torch.div(
-            torch.matmul(anchor_feature, torch.transpose(contrast_feature, 0, 1)),
-            self.temperature,
-        ).to(self.device)
+            anchor_dot_contrast = torch.div(
+                torch.matmul(anchor_feature, torch.transpose(contrast_feature, 0, 1)),
+                self.temperature,
+            ).to(
+                self.device
+            )  # size: [n_view * total_classes ,n_view * total_classes]
+
+            mask = mask.repeat(anchor_count, contrast_count).to(
+                self.device
+            )  # size: [n_view * total_classes ,n_view * total_classes]
+            logits_mask_2 = (
+                torch.ones_like(mask)
+                .scatter_(
+                    1,
+                    torch.arange(anchor_num * anchor_count).view(-1, 1).to(self.device),
+                    0,
+                )
+                .to(self.device)
+            )
+
+            neg_mask = 1 - mask
+
+            mask = mask * logits_mask_2
+
         logits_max, _ = torch.max(anchor_dot_contrast, dim=1, keepdim=True)
         logits = anchor_dot_contrast - logits_max.detach()
 
-        mask = mask.repeat(anchor_count, contrast_count).to(self.device)
-        neg_mask = 1 - mask
-
-        logits_mask = (
-            torch.ones_like(mask)
-            .scatter_(
-                1,
-                torch.arange(anchor_num * anchor_count).view(-1, 1).to(self.device),
-                0,
-            )
-            .to(self.device)
-        )
-        mask = mask * logits_mask
         neg_logits = torch.exp(logits) * neg_mask
         neg_logits = neg_logits.sum(1, keepdim=True)
 
@@ -320,17 +360,31 @@ class PixelContrastLoss(nn.Module, ABC):
 
         log_prob = logits - torch.log(exp_logits + neg_logits)
 
+        non_zero_rows = torch.any(
+            mask, dim=1
+        )  # remove class prototypes who are not present in the current batch
+        mask = mask[non_zero_rows]
+        log_prob = log_prob[non_zero_rows]
+
         mean_log_prob_pos = (mask * log_prob).sum(1) / mask.sum(1)
 
-        if self.weights is not None:
-            weight_tensor = torch.ones(labels_.size()).to(self.device)
+        if self.prototypes is not None:
+            if self.weights is not None:  # weighted CL
 
-            for idx, lbl in enumerate(labels_):
-                weight_tensor[idx] = self.weights[int(lbl)]
+                weight_tensor = self.weights.reshape(-1)
 
-            weight_tensor = weight_tensor.repeat(contrast_count, 1).reshape(-1)
+                mean_log_prob_pos *= weight_tensor
 
-            mean_log_prob_pos *= weight_tensor
+        else:
+            if self.weights is not None:  # weighted CL
+                weight_tensor = torch.ones(labels_.size()).to(self.device)
+
+                for idx, lbl in enumerate(labels_):
+                    weight_tensor[idx] = self.weights[int(lbl)]
+
+                weight_tensor = weight_tensor.repeat(contrast_count, 1).reshape(-1)
+
+                mean_log_prob_pos *= weight_tensor
 
         loss = -(self.temperature / self.base_temperature) * mean_log_prob_pos
         loss = loss.mean()
