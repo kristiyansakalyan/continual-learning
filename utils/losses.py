@@ -319,7 +319,7 @@ class PixelContrastLoss(nn.Module, ABC):
 
             non_zero_rows = torch.any(
                 mask, dim=1
-            )  # remove class prototypes who are not present in the current batch
+            )  # remove class prototypes that are not present in the current batch
 
             mask = mask[non_zero_rows]
             anchor_dot_contrast = anchor_dot_contrast[non_zero_rows]
