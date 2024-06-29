@@ -304,15 +304,25 @@ class PixelContrastLoss(nn.Module, ABC):
                 kernel_size=self.prototypes.shape[1],
                 stride=self.prototypes.shape[1],
             ).t()  # size: [num_classes,n_view * total_classes]
+
             mask = torch.zeros((anchor_count, labels_.size(0))).to(
                 self.device
             )  # size: [num_classes, total_classes]
+
             for i in range(mask.size(0)):
                 for j, lbl in enumerate(labels_):
                     mask[i, j] = i == int(lbl)
+
             mask = mask.repeat(1, contrast_count).to(
                 self.device
             )  # size: [num_classes , n_view * total_classes]
+
+            non_zero_rows = torch.any(
+                mask, dim=1
+            )  # remove class prototypes who are not present in the current batch
+
+            mask = mask[non_zero_rows]
+            anchor_dot_contrast = anchor_dot_contrast[non_zero_rows]
 
             neg_mask = 1 - mask
 
@@ -360,18 +370,12 @@ class PixelContrastLoss(nn.Module, ABC):
 
         log_prob = logits - torch.log(exp_logits + neg_logits)
 
-        non_zero_rows = torch.any(
-            mask, dim=1
-        )  # remove class prototypes who are not present in the current batch
-        mask = mask[non_zero_rows]
-        log_prob = log_prob[non_zero_rows]
-
         mean_log_prob_pos = (mask * log_prob).sum(1) / mask.sum(1)
 
         if self.prototypes is not None:
             if self.weights is not None:  # weighted CL
 
-                weight_tensor = self.weights.reshape(-1)
+                weight_tensor = self.weights[non_zero_rows].reshape(-1)
 
                 mean_log_prob_pos *= weight_tensor
 
