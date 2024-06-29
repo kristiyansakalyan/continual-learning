@@ -42,7 +42,7 @@ class PixelContrastLoss(nn.Module, ABC):
             # Setup random prototypes
             self.prototypes = torch.randn(
                 (num_classes, num_prototypes_per_class, in_channels)
-            )
+            )  # From github: in_channels=64, num_classes=11, num_prototypes_per_class=5, temperature=0.05
             # Calculate norm
             norm = self.prototypes.pow(2).sum(2, keepdim=True).pow(1.0 / 2.0)
             # Initialize prototypes as learnable parameters
@@ -127,9 +127,9 @@ class PixelContrastLoss(nn.Module, ABC):
                 ).nonzero()  # positive samples
                 hard_pixels_A = []  # all negative A pixels will be stored
                 easy_pixels_A = []  # all positive A pixels will be stored
-                num_hard_pixels_A=0
-                num_easy_pixels_A=0
-                
+                num_hard_pixels_A = 0
+                num_easy_pixels_A = 0
+
                 if self.full_batch_sampling:
                     # Traverse the rest of the batch, any other image except the current one
                     for i in range(batch_size):
@@ -144,14 +144,14 @@ class PixelContrastLoss(nn.Module, ABC):
                                 (this_y_hat_A == cls_id) & (this_y_A == cls_id)
                             ).nonzero()
                             if len(easy_indices_A) > 0:
-                                num_easy_pixels_A+=easy_indices_A.shape[0]
+                                num_easy_pixels_A += easy_indices_A.shape[0]
                                 easy_pixels_A.append(X[i, easy_indices_A, :].squeeze(1))
 
                         hard_indices_A = (
                             (this_y_hat_A == cls_id) & (this_y_A != cls_id)
                         ).nonzero()
                         if len(hard_indices_A) > 0:
-                            num_hard_pixels_A+=hard_indices_A.shape[0]
+                            num_hard_pixels_A += hard_indices_A.shape[0]
                             hard_pixels_A.append(X[i, hard_indices_A, :].squeeze(1))
 
                 else:
@@ -166,14 +166,14 @@ class PixelContrastLoss(nn.Module, ABC):
                                 (this_y_hat_A == cls_id) & (this_y_A == cls_id)
                             ).nonzero()
                             if len(easy_indices_A) > 0:
-                                num_easy_pixels_A+=easy_indices_A.shape[0]
+                                num_easy_pixels_A += easy_indices_A.shape[0]
                                 easy_pixels_A.append(X[i, easy_indices_A, :].squeeze(1))
 
                         hard_indices_A = (
                             (this_y_hat_A == cls_id) & (this_y_A != cls_id)
                         ).nonzero()
                         if len(hard_indices_A) > 0:
-                            num_hard_pixels_A+=hard_indices_A.shape[0]
+                            num_hard_pixels_A += hard_indices_A.shape[0]
                             hard_pixels_A.append(X[i, hard_indices_A, :].squeeze(1))
 
                 num_hard = (
@@ -219,7 +219,7 @@ class PixelContrastLoss(nn.Module, ABC):
                     negative_B_keep = num_hard_keep
                     negative_A_keep = 0
 
-                if num_easy_pixels_A> 0:
+                if num_easy_pixels_A > 0:
                     easy_pixels_A_ = torch.cat(easy_pixels_A, dim=0).to(self.device)
                     if easy_pixels_A_.shape[0] < positive_A_keep:
                         positive_A_keep = easy_pixels_A_.shape[0]
