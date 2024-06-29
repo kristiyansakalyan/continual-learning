@@ -30,7 +30,7 @@ class PixelContrastLoss(nn.Module, ABC):
         self.max_samples = 1024  # from github
         self.max_views = 100  # 50 in the paper, 100 in github
         self.weights = (
-            weights  # dictionary of class weights to be used in the contrastive loss
+            weights  # list of class weights to be used in the contrastive loss
         )
         self.prototypes = None
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
