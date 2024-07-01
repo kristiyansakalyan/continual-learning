@@ -19,6 +19,7 @@ class PixelContrastLoss(nn.Module, ABC):
         num_classes=None,
         num_prototypes_per_class=None,
         in_channels=None,
+        prototype_path=None,
     ):
         super(PixelContrastLoss, self).__init__()
 
@@ -38,6 +39,16 @@ class PixelContrastLoss(nn.Module, ABC):
             num_classes is not None
             and num_prototypes_per_class is not None
             and in_channels is not None
+            and prototype_path is not None
+        ):
+            print(
+                "You can't create new prototypes (by defining num_classes, num_prototypes_per_class and in_channels) and give a path to the pre-trained prototypes at the same time."
+            )
+            raise Exception
+        elif (
+            num_classes is not None
+            and num_prototypes_per_class is not None
+            and in_channels is not None
         ):
             # Setup random prototypes
             self.prototypes = torch.randn(
@@ -49,6 +60,11 @@ class PixelContrastLoss(nn.Module, ABC):
             self.prototypes = torch.nn.Parameter(
                 self.prototypes.div(norm), requires_grad=True
             )
+        elif prototype_path is not None:  # Load pre-trained prototypes
+
+            self.prototypes = torch.load(prototype_path, map_location=self.device)
+            # Ensure they are learnable parameters
+            self.prototypes = torch.nn.Parameter(self.prototypes, requires_grad=True)
 
     def _hard_anchor_sampling(self, X, y_hat, y):
         """

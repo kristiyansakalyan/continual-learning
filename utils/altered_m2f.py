@@ -14,7 +14,7 @@ from transformers.models.mask2former.modeling_mask2former import (
 from utils.common import get_perpixel_features
 
 
-class M2FWithContrastiveLoss(Mask2FormerForUniversalSegmentation):
+class M2FWithCLProjHead(Mask2FormerForUniversalSegmentation):
     def __init__(self, config: Mask2FormerConfig):
         super().__init__(config)
 
