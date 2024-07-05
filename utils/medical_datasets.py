@@ -12,6 +12,7 @@ from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
 from transformers import Mask2FormerImageProcessor
+from .augmentations import RandomCrop
 
 # from utils.common import BG_VALUE
 BG_VALUE_0 = 0
@@ -793,7 +794,7 @@ class Mask2FormerDataset(Dataset):
         img, mask = self.dataset[idx]
         
         if self.transform is not None:
-            img=self.transform(img)
+            img, mask = self.apply_transforms(img, mask)
             
         batch = self.processor(
             images=[img],
@@ -803,3 +804,11 @@ class Mask2FormerDataset(Dataset):
         )
 
         return batch
+    
+    def apply_transforms(self, img, mask):
+        for t in self.transform.transforms:
+            if isinstance(t, RandomCrop):
+                img, mask = t(img, mask)
+            else:
+                img = t(img)
+        return img, mask
