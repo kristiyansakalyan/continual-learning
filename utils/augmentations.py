@@ -26,7 +26,21 @@ class GaussianBlur(torch.nn.Module):
         sigma = random.uniform(self.sigma[0], self.sigma[1])
         return TF.gaussian_blur(tensor, self.kernel_size, [sigma])
 
+class RandomCrop(torch.nn.Module):
+    def __init__(self, height, width):
+        super(RandomCrop, self).__init__()
+        self.height = height
+        self.width = width
+        self.random_crop = transforms.RandomCrop(height, width)
 
+    def forward(self, img, mask):
+        i, j, h, w = self.random_crop.get_params(img, output_size=(self.height, self.width))
+        
+        img = TF.crop(img, i, j, h, w)
+        mask = TF.crop(mask, i, j, h, w)
+
+        return img, mask
+    
 class RandomChannelRearrangement(torch.nn.Module):
     def __init__(self):
         super(RandomChannelRearrangement, self).__init__()
@@ -165,4 +179,20 @@ train_transforms_ColorAugSSD_random = transforms.Compose(
         transforms.RandomApply([ColorAugSSDTransform()], p=0.5)
     ]
 )
+
+train_transforms_RandomCrop = transforms.Compose([
+    RandomCrop(height=135, width=240),
+])
+
+train_transforms_ColorJitterCrop = transforms.Compose([
+    RandomCrop(height=135, width=240),
+    transforms.RandomApply(
+            [
+                transforms.ColorJitter(
+                    brightness=0.5, contrast=0.5, saturation=0.5, hue=0.1
+                )
+            ],
+            p=0.5,
+        )
+])
 # ========================================================== #
