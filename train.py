@@ -37,7 +37,9 @@ from utils.augmentations import (train_transforms_noise_no_distortion,
                                  train_transforms_blur,
                                 train_transforms_blur_no_distortion,
                                 train_transforms_color_jitter,
-                                train_transforms_ColorAugSSD_random)
+                                train_transforms_ColorAugSSD_random,
+                                train_transforms_RandomCrop,
+                                train_transforms_ColorJitterCrop)
 from copy import deepcopy
 import shutil
 from utils.wandb_utils import log_table_of_images
@@ -170,12 +172,12 @@ m2f_preprocessor_B = Mask2FormerImageProcessor(
 # Create Mask2Former Datasets
 m2f_datasets = {
     "A": {
-        "train": Mask2FormerDataset(datasets["A"][0], m2f_preprocessor_A, transform=train_transforms_ColorAugSSD_random),
+        "train": Mask2FormerDataset(datasets["A"][0], m2f_preprocessor_A, transform=train_transforms_ColorJitterCrop),
         "val": Mask2FormerDataset(datasets["A"][1], m2f_preprocessor_A),
         "test": Mask2FormerDataset(datasets["A"][2], m2f_preprocessor_A),
     },
     "B": {
-        "train": Mask2FormerDataset(datasets["B"][0], m2f_preprocessor_B, transform=train_transforms_ColorAugSSD_random),
+        "train": Mask2FormerDataset(datasets["B"][0], m2f_preprocessor_B, transform=train_transforms_ColorJitterCrop),
         "val": Mask2FormerDataset(datasets["B"][1], m2f_preprocessor_B),
         "test": Mask2FormerDataset(datasets["B"][2], m2f_preprocessor_B),
     },
@@ -220,8 +222,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
 BG_VALUE_255=255
-base_run_name="M2F-Swin-Tiny-Train_Cadis_ColorAugSSD_random"
-new_run_name="M2F-Swin-Tiny-Naive_Forgetting_ColorAugSSD_random"
+base_run_name="M2F-Swin-Tiny-Train_Cadis_ColorJitterCrop"
+new_run_name="M2F-Swin-Tiny-Naive_Forgetting_ColorJitterCrop"
 project_name = "M2F_latest_aug"
 user_or_team = "continual-learning-tum"
 
