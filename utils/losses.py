@@ -305,7 +305,7 @@ class PixelContrastLoss(nn.Module, ABC):
             )  # normalize prototypes
             anchor_feature = self.prototypes.div(prototype_norm).reshape(
                 self.prototypes.shape[2], -1
-            )  # size: (in_channels, num_classes * num_prototypes_per_class)
+            ).to(self.device)  # size: (in_channels, num_classes * num_prototypes_per_class)
             anchor_count = self.prototypes.size(0)  # anchor_count==num_classes
             anchor_dot_contrast = torch.div(
                 torch.matmul(contrast_feature, anchor_feature),
